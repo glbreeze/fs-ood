@@ -364,6 +364,7 @@ class ImageNetDataset(Dataset):
         
     def __len__(self):
         return len(self.data)
+
 class ImageNet1K_OSR(object):
     def __init__(self, datasplit, dataroot='./data', use_gpu=True, num_workers=8, batch_size=128, img_size=224, few_shot = 0, cfg = None):
         normalize = transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073),

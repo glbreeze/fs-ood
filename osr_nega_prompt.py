@@ -11,8 +11,6 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.multiprocessing as mp
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.optim import lr_scheduler
 import wandb
 import open_clip
 import torchvision
@@ -34,15 +32,6 @@ from datasets.osr_dataloader import (
 from models import scheduler_builder
 from models.models import NegaPromptCLIP, OriginalCLIP
 from utils import Logger, load_networks, save_networks, get_class_prototypes, train_tsne_plot_with_proto
-
-
-from tqdm import tqdm
-import numpy as np
-from scipy import interpolate
-from sklearn import metrics
-from sklearn.metrics import accuracy_score as Acc
-from sklearn.metrics import roc_auc_score as Auc
-from sklearn.metrics import roc_curve as Roc
 
 
 _tokenizer = _Tokenizer()
@@ -144,7 +133,8 @@ def main_worker(options):
     else:
         print("Currently using CPU")
     print('stage: ', options['stage'])
-    # Dataset
+
+    # ========= Dataset =========
     print("{} Preparation".format(options['dataset']))
     if 'mnist' in options['dataset']:
         Data = MNIST_OSR(known=options['known'], dataroot=options['dataroot'], batch_size=options['batch_size'], img_size=options['img_size'])
@@ -172,16 +162,16 @@ def main_worker(options):
         Data = Tiny_ImageNet_OSR(known=options['known'], dataroot=options['dataroot'], batch_size=options['batch_size'], img_size=options['img_size'])
         trainloader, testloader, outloader = Data.train_loader, Data.test_loader, Data.out_loader
     
-    
-    
+
     options['num_classes'] = Data.num_classes
     if options['stage'] == 2 or options['stage'] == 3:
         options['max-epoch'] = 15
-    # Model
+
+
+    # ========= Model =========
     if 'ImageNet' in options['dataset']:
         classnames = Data.known
         options['CTX_INIT'] = 'a photo of a "{}"'
-
     else:
         classnames = classname_dic[options['dataset']]["classes"]
         known_class = Data.known
@@ -191,7 +181,6 @@ def main_worker(options):
         # print('classnames: ', classnames)
         options['CTX_INIT'] = classname_dic[options['dataset']]["templates"][0]
     test_labels = [classname.replace('_', ' ') for classname in classnames]
-    # print(test_labels)
     options['classnames'] = test_labels
     options['N_CTX'] = 16
     print("CLIP backbone: {}".format(options['clip_backbone']))
@@ -200,15 +189,13 @@ def main_worker(options):
     
     # clip_model, _, _ = open_clip.create_model_and_transforms('ViT-B-16', pretrained='openai')
     # clip_model, clip_preprocess = clip.load(options['clip_backbone'], device=device)
-
-    
     # clip_model, _, _ = open_clip.create_model_and_transforms('RN50', pretrained='openai')
     # clip_model, _, _ = open_clip.create_model_and_transforms('RN101', pretrained='openai')
     # clip_model, _, _ = open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')
     
     options['clip_implement'] = 'open_clip'
     # options['clip_implement'] = 'original_clip'
-    if(options['clip_implement'] == 'open_clip'):
+    if options['clip_implement'] == 'open_clip':
         clip_model.dtype = torch.float32
         clip_model.visual.input_resolution = 224
     if use_gpu:
@@ -216,10 +203,11 @@ def main_worker(options):
     # clip_model, clip_preprocess = clip.load(options['clip_backbone'], device=device)
     for params in clip_model.parameters():
         params.requires_grad_(False)
+
     model = NegaPromptCLIP(options, classnames, clip_model)
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
-    # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         model = nn.DataParallel(model)
     
     # torch.cuda.set_device(options['local_rank'])
@@ -228,7 +216,6 @@ def main_worker(options):
     # model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
     
     model_path = os.path.join(options['outf'], 'models', options['dataset'])
-
     if not os.path.exists(model_path):
         os.makedirs(model_path)
         
@@ -240,7 +227,6 @@ def main_worker(options):
         else:
             model.get_ctx_posi(save_model['module.prompt_learner.ctx_positive'])
         print('Stage 1 model loaded!')
-        # model.update_nega_features(options)
         del save_model
     
     if options['stage'] == 4:
@@ -255,7 +241,6 @@ def main_worker(options):
         model.get_ctx_nega(save_model['prompt_learner.ctx_negative'])
         print('Stage 3 model loaded!')
         del save_model
-        # model.update_nega_features(options)
     
     if options['stage'] == 5:
         model_negative_path = '{}/{}/{}'.format(model_path, 'md.pth')
@@ -263,28 +248,23 @@ def main_worker(options):
         model.get_ctx_nega(save_model['prompt_learner.ctx_negative'])
         print('Stage 3 model loaded!')
         del save_model
-        
-   
-        
+
     optimizer = torch.optim.SGD(model.parameters(), lr=options['lr'])
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(50))
-    # scheduler = scheduler_builder.ConstantWarmupSchedulr(
-    #             optimizer, scheduler_1, 1, 1e-5)
-    options.update(
-        {
-            'use_gpu':  use_gpu
-        }
-    )
+    # scheduler = scheduler_builder.ConstantWarmupSchedulr(optimizer, scheduler_1, 1, 1e-5)
+    options.update({'use_gpu':  use_gpu})
+
     Loss = importlib.import_module('loss.'+options['loss'])
     criterion = getattr(Loss, options['loss'])(**options)
+
     # file_name = '{}_{}_{}_{}_{}'.format(options['clip_backbone'].replace('/',''), options['NEGA_CTX'], options['CSC'], options['open_score'], datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S'))
     file_name = 'md.pth'
-
-    expr_name = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + "-" + run.name 
+    expr_name = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + "-" + run.name
     start_time = time.time()
     best_acc = -1
     best_auroc = -1
     proto = 0
+
     # calculate the prototype loss
     if options['prototype_weight'] != 0:
         print('Get prototypes....')
@@ -293,10 +273,12 @@ def main_worker(options):
         for i in range(options['num_classes']):
             proto[i] = prototypes[i]
         train_tsne_plot_with_proto(trainloader, testloader, model, proto, options['outf'], expr_name)
+
     results = test_nega_clip(model, criterion, testloader, outloader, epoch=0, **options)
     print("Acc (%): {:.3f}\t AUROC (%): {:.3f}\t OSCR (%): {:.3f}\t FPR95 (%): {:.3f}\t AUPR (%): {:.3f}\t".format(
         results['ACC'], results['AUROC'], results['OSCR'], results['FPR95'], results['AUPR']
         ))
+
     if options['stage'] == 4 or options['stage'] == 5:
         print('Source dataset : ', options['ori_dataset'])
         print('Target dataset : ', options['dataset'])
@@ -305,6 +287,7 @@ def main_worker(options):
         run.log(results, step = 0)
         run.finish()
         return results
+
     for epoch in range(options['max_epoch']):
         last_loss = 9999999999
         print("==> Epoch {}/{}".format(epoch+1, options['max_epoch']))
@@ -320,8 +303,6 @@ def main_worker(options):
             results = test_nega_clip(model, criterion, testloader, outloader, epoch=0, **options)
             print("Acc (%): {:.3f}\t AUROC (%): {:.3f}\t OSCR (%): {:.3f}\t FPR95 (%): {:.3f}\t AUPR (%): {:.3f}\t".format(
                  results['ACC'], results['AUROC'], results['OSCR'], results['FPR95'], results['AUPR']))
-            # results = test_clip(model, criterion, testloader, outloader, epoch=0, **options)
-            # print("Acc (%): {:.3f}\t AUROC (%): {:.3f}\t OSCR (%): {:.3f}\t".format(results['ACC'], results['AUROC'], results['OSCR']))
             run.log(results, step = epoch)
             if results['ACC'] > best_acc and options['LOG'] and options['stage'] == 1:
                 best_acc = results['ACC']
@@ -336,7 +317,7 @@ def main_worker(options):
         if options['stepsize'] > 0: scheduler.step()
         # draw the t-sne plot of all the text features
         if 'ImageNet' not in options['dataset']:
-            model.draw_tsne_plot(testloader, outloader, options['outf'], expr_name, epoch)  
+            model.draw_tsne_plot(testloader, outloader, options['outf'], expr_name, epoch)
         print('Now running stage_{}, dataset_{}, best_auroc: {}'.format(options['stage'], options['dataset'], best_auroc))
         if options['stage'] == 4:
             print('Original dataset : ', options['ori_dataset'])
