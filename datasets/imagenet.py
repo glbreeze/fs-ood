@@ -16,7 +16,7 @@ class ImageNet(DatasetBase):
     def __init__(self, cfg):
         root = os.path.abspath(os.path.expanduser(cfg.DATASET.ROOT))
         self.dataset_dir = os.path.join(root, self.dataset_dir)
-        self.image_dir = os.path.join(self.dataset_dir, "images")
+        self.image_dir = os.path.join('/imagenet/')
         self.preprocessed = os.path.join(self.dataset_dir, "preprocessed.pkl")
         self.split_fewshot_dir = os.path.join(self.dataset_dir, "split_fewshot")
         mkdir_if_missing(self.split_fewshot_dir)
@@ -27,7 +27,7 @@ class ImageNet(DatasetBase):
                 train = preprocessed["train"]
                 test = preprocessed["test"]
         else:
-            text_file = os.path.join(self.dataset_dir, "classnames.txt")
+            text_file = os.path.join("datasets/imagenet_classes.txt")
             classnames = self.read_classnames(text_file)
             train = self.read_data(classnames, "train")
             # Follow standard practice to perform evaluation on the val set
