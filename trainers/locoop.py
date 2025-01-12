@@ -408,6 +408,7 @@ class LoCoOp(TrainerX):
         """Test-time OOD detection pipeline."""
         to_np = lambda x: x.data.cpu().numpy()
         concat = lambda x: np.concatenate(x, axis=0)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.set_model_mode("eval")
         self.evaluator.reset()
@@ -415,7 +416,7 @@ class LoCoOp(TrainerX):
         glmcm_score = []
         mcm_score = []
         for batch_idx, (images, labels, *id_flag) in enumerate(tqdm(data_loader)):
-            images = images.cuda()
+            images = images.to(device)
             output, output_local = self.model_inference(images)
             output /= 100.0
             output_local /= 100.0

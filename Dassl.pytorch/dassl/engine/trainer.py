@@ -1,4 +1,5 @@
 import time
+import wandb
 import numpy as np
 import os.path as osp
 import datetime
@@ -427,17 +428,21 @@ class SimpleTrainer(TrainerBase):
             if self.cfg.TRAIN.CHECKPOINT_FREQ > 0 else False
         )
 
-        if do_test and self.cfg.TEST.FINAL_MODEL == "best_val":
+        if do_test:
             curr_result = self.test(split="val")
-            is_best = curr_result > self.best_result
-            if is_best:
-                self.best_result = curr_result
-                self.save_model(
-                    self.epoch,
-                    self.output_dir,
-                    val_result=curr_result,
-                    model_name="model-best.pth.tar"
-                )
+            
+            wandb.log({f"val/acc": curr_result}, step=(1 + self.epoch) * self.num_batches)
+        
+            if self.cfg.TEST.FINAL_MODEL == "best_val":
+                is_best = curr_result > self.best_result
+                if is_best:
+                    self.best_result = curr_result
+                    self.save_model(
+                        self.epoch,
+                        self.output_dir,
+                        val_result=curr_result,
+                        model_name="model-best.pth.tar"
+                    )
 
         if meet_checkpoint_freq or last_epoch:
             self.save_model(self.epoch, self.output_dir)
@@ -602,9 +607,7 @@ class TrainerX(SimpleTrainer):
             if meet_freq or only_few_batches:
                 nb_remain = 0
                 nb_remain += self.num_batches - self.batch_idx - 1
-                nb_remain += (
-                    self.max_epoch - self.epoch - 1
-                ) * self.num_batches
+                nb_remain += (self.max_epoch - self.epoch - 1) * self.num_batches
                 eta_seconds = batch_time.avg * nb_remain
                 eta = str(datetime.timedelta(seconds=int(eta_seconds)))
 
@@ -618,10 +621,15 @@ class TrainerX(SimpleTrainer):
                 info += [f"eta {eta}"]
                 print(" ".join(info))
 
-            n_iter = self.epoch * self.num_batches + self.batch_idx
-            for name, meter in losses.meters.items():
-                self.write_scalar("train/" + name, meter.avg, n_iter)
-            self.write_scalar("train/lr", self.get_current_lr(), n_iter)
+                n_iter = self.epoch * self.num_batches + self.batch_idx
+                for name, meter in losses.meters.items():
+                    self.write_scalar("train/" + name, meter.avg, n_iter)
+                self.write_scalar("train/lr", self.get_current_lr(), n_iter)
+                
+                for name, meter in losses.meters.items():
+                    wandb.log({f"train/{name}": meter.avg}, step=n_iter)
+
+                wandb.log({"train/lr": self.get_current_lr()}, step=n_iter)
 
             end = time.time()
 

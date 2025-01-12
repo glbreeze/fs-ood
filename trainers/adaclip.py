@@ -1,9 +1,15 @@
 import os.path as osp
-
+import os
+import wandb
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 from torch.cuda.amp import GradScaler, autocast
+
+import clip_w_local
+from utils.detection_util import get_and_print_results
+from utils.plot_util import plot_distribution
+from utils.train_eval_util import set_val_loader, set_ood_loader_ImageNet
 
 from dassl.engine import TRAINER_REGISTRY, TrainerX
 from dassl.metrics import compute_accuracy
@@ -40,16 +46,30 @@ _tokenizer = _Tokenizer()
 softmax = nn.Softmax(dim=1).cuda()
 
 
-def entropy_select_topk(p, top_k, label, num_of_local_feature):
+def entropy_select_topk(p, top_k, label):
     """
     Extract non-Top-K regions and calculate entropy.
     """
-    label_repeat = label.repeat_interleave(num_of_local_feature)
     p = F.softmax(p, dim=-1)
     pred_topk = torch.topk(p, k=top_k, dim=1)[1]
-    contains_label = pred_topk.eq(torch.tensor(label_repeat).unsqueeze(1)).any(dim=1)
+    contains_label = pred_topk.eq(label.unsqueeze(1)).any(dim=1)
     selected_p = p[~contains_label]
 
+    if selected_p.shape[0] == 0:
+        return torch.tensor([0]).cuda()
+    return -torch.mean(torch.sum(selected_p * torch.log(selected_p+1e-5), 1))
+
+
+def entropy_select_topk_crop(output_local, top_k, label):
+    """
+    Select OOD samples based on top-K entropy and thresholds.
+    """
+    # Compute entropy
+    p = F.softmax(output_local, dim=1)
+    pred_topk = torch.topk(p, k=top_k, dim=1)[1]
+    contains_label = pred_topk.eq(torch.tensor(label).unsqueeze(1)).any(dim=1)
+    selected_p = p[~contains_label]
+    
     if selected_p.shape[0] == 0:
         return torch.tensor([0]).cuda()
     return -torch.mean(torch.sum(selected_p * torch.log(selected_p+1e-5), 1))
@@ -219,19 +239,22 @@ class PromptLearner(nn.Module):
     
 
 class Adapter(nn.Module):
-    def __init__(self, cfg, clip_model):
+    def __init__(self, clip_model, reduction=4, ratio=0.2):
         super(Adapter, self).__init__()
         c_in = clip_model.text_projection.shape[1]
+        self.dtype = clip_model.dtype
         self.fc = nn.Sequential(
-            nn.Linear(c_in, c_in // cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, bias=False),
+            nn.Linear(c_in, c_in // reduction, bias=False).to(self.dtype),
             nn.ReLU(inplace=True),
-            nn.Linear(c_in // cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, c_in, bias=False),
+            nn.Linear(c_in // reduction, c_in, bias=False).to(self.dtype),
             nn.ReLU(inplace=True)
         )
-        self.ratio = cfg.TRAINER.IMAGE_ADAPTER.RATIO
+        self.ratio = torch.tensor(ratio, dtype=self.dtype, requires_grad=False)
 
     def forward(self, x):
-        return self.fc(x) * self.ratio + x * (1-self.ratio)
+        ratio = self.ratio.to(x.device)
+        # print(f"x device: {x.device}, ratio device: {ratio.device}")
+        return self.fc(x.to(self.dtype)) * ratio + x.to(self.dtype) * (1-ratio)
         
 
 class CustomCLIP(nn.Module):
@@ -248,36 +271,54 @@ class CustomCLIP(nn.Module):
             self.tokenized_prompts = self.prompt_learner.tokenized_prompts
         else:
             temp = CUSTOM_TEMPLATES[self.cfg.DATASET.NAME]
-            prompts = [temp.format(c.replace('_', ' ')) for c in self.classnames]
+            prompts = [temp.format(c.replace('_', ' ')) for c in classnames]
             tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])
-            with torch.no_grad():
-                embeddings = clip_model.token_embedding(tokenized_prompts).type(clip_model.dtype)
-                self.text_features = self.text_encoder(embeddings, tokenized_prompts)
+            
+            text_feat_file = f"text_features_{cfg.DATASET.NAME}_{cfg.DATASET.SUBSAMPLE_CLASSES}.pt"
+            if os.path.exists(text_feat_file):
+                print(f"Loading precomputed text features from {text_feat_file}")
+                self.text_features = torch.load(text_feat_file).type(clip_model.dtype)
+            else:
+                print(f"Computing and saving text features to {text_feat_file}")
+                with torch.no_grad():
+                    embeddings = clip_model.token_embedding(tokenized_prompts).type(clip_model.dtype)
+                    self.text_features = self.text_encoder(embeddings, tokenized_prompts)
+                    torch.save(self.text_features, text_feat_file)
+        
+        if cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER:
+            self.text_adapter = Adapter(clip_model, reduction=cfg.TRAINER.TEXT_ADAPTER.REDUCTION, ratio=cfg.TRAINER.TEXT_ADAPTER.RATIO)
+        else:
+            self.text_adapter = None
         
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
-            self.image_adapter = Adapter(cfg, clip_model)  # Assuming ImageAdapter is a class for the image adapter
+            self.image_adapter = Adapter(clip_model, reduction=cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, ratio=cfg.TRAINER.IMAGE_ADAPTER.RATIO)  # Assuming ImageAdapter is a class for the image adapter
         else:
             self.image_adapter = None
 
-    def forward(self, image):
+    def forward(self, image, use_ori_clip=False):
         # ===== get image features =====
         image_features, local_image_features = self.image_encoder(image.type(self.dtype))
-        if self.cfg.TRAINER.LOCOOP.USE_IMAGE_ADAPTER:
+        
+        if self.cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER and (not use_ori_clip):
             image_features = self.image_adapter(image_features)
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
         # ===== get text features =====
-        if self.cfg.TRAINER.LOCOOP.USE_TEXT_PROMPT:
+        if self.cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
             embeddings = self.prompt_learner()
             text_features = self.text_encoder(embeddings, self.tokenized_prompts)
         else:
-            text_features = self.text_features
+            text_features = self.text_features.to(image.device)
+            
+        if self.cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER and (not use_ori_clip):
+            text_features = self.text_adapter(text_features)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
         logit_scale = self.logit_scale.exp()
         logits = logit_scale * image_features @ text_features.t()
+        logits_local = logit_scale * local_image_features @ text_features.T
 
-        return logits
+        return logits, logits_local
 
 
 @TRAINER_REGISTRY.register()
@@ -306,7 +347,7 @@ class AdaClip(TrainerX):
 
         print("Turning off gradients in both the image and the text encoder")
         for name, param in self.model.named_parameters():
-            if ("prompt_learner" not in name) and ("image_adapter" not in name):
+            if ("prompt_learner" not in name) and ("adapter" not in name):
                 param.requires_grad_(False)
 
         if cfg.MODEL.INIT_WEIGHTS and cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
@@ -314,14 +355,28 @@ class AdaClip(TrainerX):
 
         self.model.to(self.device)
         if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            self.optim = build_optimizer(self.model.prompt_learner, cfg.OPTIM)
-        elif cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
-            self.optim = build_optimizer(self.model.image_adapter, cfg.OPTIM)
-        self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
-        if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            self.register_model("prompt_learner", self.model.prompt_learner, self.optim, self.sched)
-        elif cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
-            self.register_model("image_adapter", self.model.image_adapter, self.optim, self.sched)
+            if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
+                self.optim = build_optimizer(self.model.prompt_learner, cfg.OPTIM)
+                self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
+                self.register_model("prompt_learner", self.model.prompt_learner, self.optim, self.sched)
+            else:
+                self.register_model("prompt_learner", self.model.prompt_learner)
+                
+        if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
+            if cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
+                self.optim = build_optimizer(self.model.image_adapter, cfg.OPTIM)
+                self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
+                self.register_model("image_adapter", self.model.image_adapter, self.optim, self.sched)
+            else:
+                self.register_model("image_adapter", self.model.image_adapter)
+                
+        if cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER:
+            if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER:
+                self.optim = build_optimizer(self.model.text_adapter, cfg.OPTIM)
+                self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
+                self.register_model("text_adapter", self.model.text_adapter, self.optim, self.sched)
+            else:
+                self.register_model("text_adapter", self.model.text_adapter)
 
         self.scaler = GradScaler() if cfg.TRAINER.ADAPTERS.PREC == "amp" else None
 
@@ -337,8 +392,23 @@ class AdaClip(TrainerX):
 
         prec = self.cfg.TRAINER.ADAPTERS.PREC
 
-        if prec == "amp":
-            with autocast():
+        use_amp = prec == "amp"
+        with autocast(enabled=use_amp):
+            if isinstance(image, tuple) or isinstance(image, list):  # Two-crop augmentation scenario
+                global_crop, local_crop = image
+
+                output, _ = self.model(global_crop)
+                output_local, _ = self.model(local_crop, use_ori_clip=True)
+
+                # Calculate loss (for global crop)
+                loss_id = F.cross_entropy(output, label)
+                # Calculate OOD regularization loss (for local crop)
+                loss_en = -entropy_select_topk(output_local, self.top_k, label)
+
+                # Calculate total loss
+                loss = loss_id + self.lambda_value * loss_en
+                
+            else:
                 output, output_local = self.model(image)
                 # calculate CoOp loss
                 loss_id = F.cross_entropy(output, label)
@@ -346,29 +416,17 @@ class AdaClip(TrainerX):
                 # calculate OOD regularization loss
                 batch_size, num_of_local_feature = output_local.shape[0], output_local.shape[1]
                 output_local = output_local.view(batch_size * num_of_local_feature, -1)
-                loss_en = - entropy_select_topk(output_local, self.top_k, label, num_of_local_feature)
+                loss_en = - entropy_select_topk(output_local, self.top_k, label.repeat_interleave(num_of_local_feature))
 
                 # calculate total loss for LoCoOp
                 loss = loss_id + self.lambda_value * loss_en
-
+        
+        if use_amp:
             self.optim.zero_grad()
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optim)
             self.scaler.update()
         else:
-            output, output_local = self.model(image)
-
-            # calculate CoOp loss
-            loss_id = F.cross_entropy(output, label) 
-
-            # calculate OOD regularization loss
-            batch_size, num_of_local_feature = output_local.shape[0], output_local.shape[1]
-            output_local = output_local.view(batch_size * num_of_local_feature, -1)     
-            loss_en = - entropy_select_topk(output_local, self.top_k, label, num_of_local_feature)
-
-            # calculate total loss for LoCoOp
-            loss = loss_id + self.lambda_value * loss_en
-
             self.model_backward_and_update(loss)
 
         loss_summary = {
@@ -386,7 +444,10 @@ class AdaClip(TrainerX):
     def parse_batch_train(self, batch):
         input = batch["img"]
         label = batch["label"]
-        input = input.to(self.device)
+        if "two_crop" in self.cfg.INPUT.TRANSFORMS:
+            input = [img.to(self.device) for img in input]
+        else:
+            input = input.to(self.device)
         label = label.to(self.device)
         return input, label
 
@@ -467,7 +528,7 @@ class AdaClip(TrainerX):
 
         glmcm_score = []
         mcm_score = []
-        for batch_idx, (images, labels, *id_flag) in enumerate(tqdm(data_loader)):
+        for batch_idx, (images, labels, *id_flag) in enumerate(data_loader):
             images = images.cuda()
             output, output_local = self.model_inference(images)
             output /= 100.0
@@ -505,3 +566,90 @@ class AdaClip(TrainerX):
         contains_label = pred_topk.eq(torch.tensor(label_repeat).unsqueeze(1)).any(dim=1)
 
         return contains_label
+
+    @torch.no_grad()
+    def tsne_visualize(self, img_path, label):
+        """code for visualization results"""
+        self.set_model_mode("eval")
+        self.evaluator.reset()
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model, preprocess = clip.load("ViT-B/16", device=device)
+
+        image = preprocess(Image.open(img_path)).unsqueeze(0).to(device)
+        output, output_local = self.model_inference(image)
+
+        num_regions = output_local.shape[1]
+        label = torch.tensor(label).cuda()
+        label_repeat = label.repeat_interleave(num_regions)
+        output_local = F.softmax(output_local, dim=-1)
+
+        output_local = output_local.view(num_regions, -1)
+
+        # -----top 200--------
+        pred_topk = torch.topk(output_local, k=200, dim=1)[1]
+        contains_label = pred_topk.eq(torch.tensor(label_repeat).unsqueeze(1)).any(dim=1)
+
+        return contains_label
+    
+    def train(self, args=None):
+        """Generic training loops."""
+
+        self.before_train()
+        
+        for self.epoch in range(self.start_epoch, self.max_epoch):
+    
+            self.before_epoch()
+            self.run_epoch()
+            self.after_epoch()
+            
+            if (self.epoch + 1) % 10 == 0:
+                print(f"Running eval_ood at epoch {self.epoch + 1}")
+                self.eval_ood(args)
+        self.after_train()
+        
+    
+    def eval_ood(self, args):
+        self.set_model_mode("eval")
+        
+        if args.in_dataset in ['imagenet']:
+            out_datasets = ['iNaturalist', 'SUN', 'places365', 'Texture']
+    
+        _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
+
+        id_data_loader = set_val_loader(args, preprocess)
+        in_score_mcm, in_score_gl = self.test_ood(id_data_loader, args.T)
+
+        auroc_list_mcm, aupr_list_mcm, fpr_list_mcm = [], [], []
+        auroc_list_gl, aupr_list_gl, fpr_list_gl = [], [], []
+
+        for out_dataset in out_datasets:
+            print(f"Evaluting OOD dataset {out_dataset}")
+            ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
+            out_score_mcm, out_score_gl = self.test_ood(ood_loader, args.T)
+
+            print("MCM score")
+            get_and_print_results(args, in_score_mcm, out_score_mcm,
+                                auroc_list_mcm, aupr_list_mcm, fpr_list_mcm)
+
+            print("GL-MCM score")
+            get_and_print_results(args, in_score_gl, out_score_gl,
+                                auroc_list_gl, aupr_list_gl, fpr_list_gl)
+            
+            
+
+            if self.epoch == self.max_epoch - 1:
+                plot_distribution(args, in_score_mcm, out_score_mcm, out_dataset, score='MCM')
+                plot_distribution(args, in_score_gl, out_score_gl, out_dataset, score='GLMCM')
+
+        print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_mcm), np.mean(auroc_list_mcm), np.mean(aupr_list_mcm)))
+        print("GL-MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_gl), np.mean(auroc_list_gl), np.mean(aupr_list_gl)))
+        wandb.log({"mcm/fpr": np.mean(fpr_list_mcm),
+                   "mcm/auroc": np.mean(auroc_list_mcm), 
+                   "mcm/aupr": np.mean(aupr_list_mcm)
+                   }, step=(1 + self.epoch) * self.num_batches)
+
+        wandb.log({"gl-mcm/fpr": np.mean(fpr_list_gl),
+                   "gl-mcm/auroc": np.mean(auroc_list_gl), 
+                   "gl-mcm/aupr": np.mean(aupr_list_gl)
+                   }, step=(1 + self.epoch) * self.num_batches)

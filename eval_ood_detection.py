@@ -1,5 +1,6 @@
 import argparse
 import torch
+import clip_w_local
 from dassl.utils import setup_logger, set_random_seed, collect_env_info
 from dassl.config import get_cfg_default
 from dassl.engine import build_trainer
@@ -98,9 +99,7 @@ def setup_cfg(args):
 
 
 def main(args):
-    import clip_w_local
     cfg = setup_cfg(args)
-    _, preprocess = clip_w_local.load(cfg.MODEL.BACKBONE.NAME)
 
     if cfg.SEED >= 0:
         print("Setting fixed seed: {}".format(cfg.SEED))
@@ -114,12 +113,18 @@ def main(args):
     print("Collecting env info ...")
     print("** System info **\n{}\n".format(collect_env_info()))
 
+    trainer = build_trainer(cfg)
+    trainer.load_model(args.model_dir, epoch=args.load_epoch)
+
+    eval_ood(trainer, args, cfg)
+    return
+
+
+def eval_ood(trainer, args, cfg):
     if args.in_dataset in ['imagenet']:
         out_datasets = ['iNaturalist', 'SUN', 'places365', 'Texture']
-
-    trainer = build_trainer(cfg)
-
-    trainer.load_model(args.model_dir, epoch=args.load_epoch)
+    
+    _, preprocess = clip_w_local.load(cfg.MODEL.BACKBONE.NAME)
 
     id_data_loader = set_val_loader(args, preprocess)
 
@@ -146,8 +151,6 @@ def main(args):
 
     print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_mcm), np.mean(auroc_list_mcm), np.mean(aupr_list_mcm)))
     print("GL-MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_gl), np.mean(auroc_list_gl), np.mean(aupr_list_gl)))
-
-    return
 
 
 if __name__ == "__main__":

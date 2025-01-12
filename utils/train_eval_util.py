@@ -31,7 +31,7 @@ def set_val_loader(args, preprocess=None):
     kwargs = {'num_workers': 4, 'pin_memory': True}
     if args.in_dataset == "imagenet":
         val_loader = torch.utils.data.DataLoader(
-            datasets.ImageFolder(os.path.join(args.root, 'imagenet/images/val'), transform=preprocess),
+            datasets.ImageFolder('/imagenet/val', transform=preprocess),
             batch_size=args.batch_size, shuffle=False, **kwargs)
     else:
         raise NotImplementedError

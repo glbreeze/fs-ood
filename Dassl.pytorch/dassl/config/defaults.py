@@ -38,6 +38,8 @@ _C.INPUT.PIXEL_STD = [0.229, 0.224, 0.225]
 _C.INPUT.CROP_PADDING = 4
 # Random resized crop
 _C.INPUT.RRCROP_SCALE = (0.08, 1.0)
+_C.INPUT.GLOBAL_RRCROP_SCALE = (0.2, 1.0)
+_C.INPUT.LOCAL_RRCROP_SCALE = (0.05, 0.2)
 # Cutout
 _C.INPUT.CUTOUT_N = 1
 _C.INPUT.CUTOUT_LEN = 16
@@ -100,7 +102,7 @@ _C.DATALOADER.RETURN_IMG0 = False
 # Setting for the train_x data-loader
 _C.DATALOADER.TRAIN_X = CN()
 _C.DATALOADER.TRAIN_X.SAMPLER = "RandomSampler"
-_C.DATALOADER.TRAIN_X.BATCH_SIZE = 32
+_C.DATALOADER.TRAIN_X.BATCH_SIZE = 16
 # Parameter for RandomDomainSampler
 # 0 or -1 means sampling from all domains
 _C.DATALOADER.TRAIN_X.N_DOMAIN = 0

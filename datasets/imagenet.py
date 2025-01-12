@@ -58,7 +58,7 @@ class ImageNet(DatasetBase):
         subsample = cfg.DATASET.SUBSAMPLE_CLASSES
         train, test = OxfordPets.subsample_classes(train, test, subsample=subsample)
 
-        super().__init__(train_x=train, val=test, test=test)
+        super().__init__(train_x=train, val=test, test=test)   # list of Datum items
 
     @staticmethod
     def read_classnames(text_file):

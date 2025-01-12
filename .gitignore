@@ -1,0 +1,8 @@
+*.out
+output/
+trainers/__pycache__/
+clip_w_local/__pycache__/
+utils/__pycache__/
+wandb/
+
+
