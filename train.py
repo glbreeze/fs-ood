@@ -1,5 +1,8 @@
 import argparse
 import torch
+import wandb
+import os
+from yacs.config import CfgNode
 
 from dassl.utils import setup_logger, set_random_seed, collect_env_info
 from dassl.config import get_cfg_default
@@ -44,7 +47,7 @@ def reset_cfg(cfg, args):
     if args.head:
         cfg.MODEL.HEAD.NAME = args.head
 
-    if args.lambda_value:
+    if args.lambda_value>=0.0:
         cfg.lambda_value = args.lambda_value
 
     if args.topk:
@@ -97,6 +100,29 @@ def setup_cfg(args):
     return cfg
 
 
+def cfg_to_dict(cfg_node):
+    """
+    Recursively converts a yacs CfgNode into a fully decomposed dictionary.
+    Args:
+        cfg_node (CfgNode): The configuration node to convert.
+    Returns:
+        dict: A dictionary representation of the CfgNode.
+    """
+    if isinstance(cfg_node, CfgNode):
+        result = {}
+        for key, value in cfg_node.items():
+            if isinstance(value, CfgNode):
+                result[key] = cfg_to_dict(value)
+            else:
+                result[key] = value
+        return result
+    elif isinstance(cfg_node, list):
+        # If the value is a list, process each item recursively
+        return [cfg_to_dict(item) for item in cfg_node]
+    else:
+        return cfg_node
+
+
 def main(args):
     cfg = setup_cfg(args)
     if cfg.SEED >= 0:
@@ -110,6 +136,14 @@ def main(args):
     print_args(args, cfg)
     print("Collecting env info ...")
     print("** System info **\n{}\n".format(collect_env_info()))
+    
+    os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
+    os.environ["WANDB_MODE"] = "online"  # "dryrun"
+    os.environ["WANDB_CACHE_DIR"] = "/scratch/lg154/sseg/.cache/wandb"
+    os.environ["WANDB_CONFIG_DIR"] = "/scratch/lg154/sseg/.config/wandb"
+    wandb.login(key='0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee')
+    wandb.init(project='fs_ood', name=cfg.OUTPUT_DIR)
+    wandb.config.update(cfg_to_dict(cfg))
 
     trainer = build_trainer(cfg)
 
@@ -119,7 +153,7 @@ def main(args):
         return
 
     if not args.no_train:
-        trainer.train()
+        trainer.train(args)
 
 
 if __name__ == "__main__":
@@ -171,6 +205,12 @@ if __name__ == "__main__":
                         help='weight for regulization loss')
     parser.add_argument('--topk', type=int, default=200,
                         help='topk for extracted OOD regions')
+    
+    # augment for MCM and GL-MCM
+    parser.add_argument('--in_dataset', default='imagenet', type=str,
+                        choices=['imagenet'], help='in-distribution dataset')
+    parser.add_argument('-b', '--batch-size', default=128, type=int, help='mini-batch size')
+    parser.add_argument('--T', type=float, default=1, help='temperature parameter')
 
     args = parser.parse_args()
     main(args)

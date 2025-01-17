@@ -1,4 +1,11 @@
 import os.path as osp
+import os
+import wandb
+
+import clip_w_local
+from utils.detection_util import get_and_print_results
+from utils.plot_util import plot_distribution
+from utils.train_eval_util import set_val_loader, set_ood_loader_ImageNet
 
 import torch
 import torch.nn as nn
@@ -19,6 +26,24 @@ from PIL import Image
 
 _tokenizer = _Tokenizer()
 softmax = nn.Softmax(dim=1).cuda()
+
+CUSTOM_TEMPLATES = {
+    'OxfordPets': 'a photo of a {}, a type of pet.',
+    'OxfordFlowers': 'a photo of a {}, a type of flower.',
+    'FGVCAircraft': 'a photo of a {}, a type of aircraft.',
+    'DescribableTextures': '{} texture.',
+    'EuroSAT': 'a centered satellite photo of {}.',
+    'StanfordCars': 'a photo of a {}.',
+    'Food101': 'a photo of {}, a type of food.',
+    'SUN397': 'a photo of a {}.',
+    'Caltech101': 'a photo of a {}.',
+    'UCF101': 'a photo of a person doing {}.',
+    'ImageNet': 'a photo of a {}.',
+    'ImageNetSketch': 'a photo of a {}.',
+    'ImageNetV2': 'a photo of a {}.',
+    'ImageNetA': 'a photo of a {}.',
+    'ImageNetR': 'a photo of a {}.'
+}
 
 
 def entropy_select_topk(p, top_k, label, num_of_local_feature):
@@ -453,3 +478,68 @@ class LoCoOp(TrainerX):
         contains_label = pred_topk.eq(torch.tensor(label_repeat).unsqueeze(1)).any(dim=1)
 
         return contains_label
+    
+    def train(self, args=None):
+    
+        """Generic training loops."""
+        self.before_train()
+
+        for self.epoch in range(self.start_epoch, self.max_epoch):
+
+            self.before_epoch()
+            self.run_epoch()
+            self.after_epoch()
+
+            if (self.epoch + 1) % 10 == 0:
+                print(f"Running eval_ood at epoch {self.epoch + 1}")
+                self.eval_ood(args)
+
+        self.after_train()
+    
+    def eval_ood(self, args):
+        self.set_model_mode("eval")
+        
+        if args.in_dataset in ['imagenet']:
+            out_datasets = ['iNaturalist', 'SUN', 'places365', 'Texture']
+    
+        _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
+
+        id_data_loader = set_val_loader(args, preprocess)
+        in_score_mcm, in_score_gl = self.test_ood(id_data_loader, args.T)
+
+        auroc_list_mcm, aupr_list_mcm, fpr_list_mcm = [], [], []
+        auroc_list_gl, aupr_list_gl, fpr_list_gl = [], [], []
+
+        for out_dataset in out_datasets:
+            print(f"Evaluting OOD dataset {out_dataset}")
+            ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
+            out_score_mcm, out_score_gl = self.test_ood(ood_loader, args.T)
+
+            print("MCM score")
+            get_and_print_results(args, in_score_mcm, out_score_mcm,
+                                auroc_list_mcm, aupr_list_mcm, fpr_list_mcm)
+
+            print("GL-MCM score")
+            get_and_print_results(args, in_score_gl, out_score_gl,
+                                auroc_list_gl, aupr_list_gl, fpr_list_gl)
+            
+            
+
+            if self.epoch == self.max_epoch - 1:
+                plot_distribution(args, in_score_mcm, out_score_mcm, out_dataset, score='MCM')
+                plot_distribution(args, in_score_gl, out_score_gl, out_dataset, score='GLMCM')
+
+        print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_mcm), np.mean(auroc_list_mcm), np.mean(aupr_list_mcm)))
+        print("GL-MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_gl), np.mean(auroc_list_gl), np.mean(aupr_list_gl)))
+        wandb.log({"mcm/fpr": np.mean(fpr_list_mcm),
+                   "mcm/auroc": np.mean(auroc_list_mcm), 
+                   "mcm/aupr": np.mean(aupr_list_mcm)
+                   }, step=(1 + self.epoch) * self.num_batches)
+
+        wandb.log({"gl-mcm/fpr": np.mean(fpr_list_gl),
+                   "gl-mcm/auroc": np.mean(auroc_list_gl), 
+                   "gl-mcm/aupr": np.mean(aupr_list_gl)
+                   }, step=(1 + self.epoch) * self.num_batches)
+
+
+        

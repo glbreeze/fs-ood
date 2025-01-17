@@ -4,7 +4,9 @@ import wandb
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from torch.nn.functional import mse_loss
 from torch.cuda.amp import GradScaler, autocast
+from scipy import stats
 
 import clip_w_local
 from utils.detection_util import get_and_print_results
@@ -41,6 +43,108 @@ CUSTOM_TEMPLATES = {
     'ImageNetR': 'a photo of a {}.'
 }
 
+
+def compute_contrastive_loss(output, label, temperature=0.07):
+    # Cosine similarity based contrastive loss (normalized embeddings)
+    sim_matrix = torch.matmul(output, output.T) / temperature
+    labels = label.view(-1, 1)
+    mask = torch.eq(labels, labels.T).float()  # 1 for positive pairs, 0 for negatives
+
+    # Compute contrastive loss
+    exp_sim = torch.exp(sim_matrix) * mask  # Keep positive pairs
+    sum_exp_sim = torch.sum(torch.exp(sim_matrix), dim=1, keepdim=True)  # All pairs
+
+    # Normalize the loss for each instance
+    loss = -torch.log(exp_sim / sum_exp_sim)
+    return loss.mean()
+
+
+class SupConLoss(nn.Module):
+    """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
+    It also supports the unsupervised contrastive loss in SimCLR"""
+    def __init__(self, temperature=0.07, contrast_mode='all', base_temperature=0.07):
+        super(SupConLoss, self).__init__()
+        self.temperature = temperature
+        self.contrast_mode = contrast_mode
+        self.base_temperature = base_temperature
+
+    def forward(self, features, labels=None):
+        """Compute loss for model. If both `labels` and `mask` are None, it degenerates to SimCLR unsupervised loss:
+        https://arxiv.org/pdf/2002.05709.pdf
+
+        Args:
+            features: hidden vector of shape [bsz, n_views, ...].
+            labels: ground truth of shape [bsz].
+        Returns:
+            A loss scalar.
+        """
+        device = (torch.device('cuda') if features.is_cuda else torch.device('cpu'))
+
+        if len(features.shape) < 3:
+            raise ValueError('`features` needs to be [bsz, n_views, ...], at least 3 dimensions are required')
+        if len(features.shape) > 3:
+            features = features.view(features.shape[0], features.shape[1], -1)
+
+        batch_size = features.shape[0]
+        if labels is None:
+            mask = torch.eye(batch_size, dtype=torch.float32).to(device)
+        elif labels is not None:
+            labels = labels.contiguous().view(-1, 1)
+            if labels.shape[0] != batch_size:
+                raise ValueError('Num of labels does not match num of features')
+            mask = torch.eq(labels, labels.T).float().to(device)
+
+        contrast_count = features.shape[1]
+        contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0)
+        if self.contrast_mode == 'one':
+            anchor_feature = features[:, 0]
+            anchor_count = 1
+        elif self.contrast_mode == 'all':
+            anchor_feature = contrast_feature
+            anchor_count = contrast_count
+        else:
+            raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
+
+        # compute logits
+        anchor_dot_contrast = torch.div(
+            torch.matmul(anchor_feature, contrast_feature.T),
+            self.temperature)
+        # for numerical stability
+        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        logits = anchor_dot_contrast - logits_max.detach()
+
+        # tile mask
+        mask = mask.repeat(anchor_count, contrast_count)
+        # mask-out self-contrast cases
+        logits_mask = torch.scatter(
+            torch.ones_like(mask),
+            1,
+            torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
+            0
+        )
+        mask = mask * logits_mask
+
+        # compute log_prob
+        exp_logits = torch.exp(logits) * logits_mask
+        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+
+        # compute mean of log-likelihood over positive
+        # modified to handle edge cases when there is no positive pair
+        # for an anchor point.
+        # Edge case e.g.:-
+        # features of shape: [4,1,...]
+        # labels:            [0,1,1,2]
+        # loss before mean:  [nan, ..., ..., nan]
+        mask_pos_pairs = mask.sum(1)
+        mask_pos_pairs = torch.where(mask_pos_pairs < 1e-6, 1, mask_pos_pairs)
+        mean_log_prob_pos = (mask * log_prob).sum(1) / mask_pos_pairs
+
+        # loss
+        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
+        loss = loss.view(anchor_count, batch_size).mean()
+
+        return loss
+    
 
 _tokenizer = _Tokenizer()
 softmax = nn.Softmax(dim=1).cuda()
@@ -301,7 +405,9 @@ class CustomCLIP(nn.Module):
         
         if self.cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER and (not use_ori_clip):
             image_features = self.image_adapter(image_features)
+            
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        local_image_features = local_image_features / local_image_features.norm(dim=-1, keepdim=True)
 
         # ===== get text features =====
         if self.cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
@@ -312,13 +418,14 @@ class CustomCLIP(nn.Module):
             
         if self.cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER and (not use_ori_clip):
             text_features = self.text_adapter(text_features)
+            
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
         logit_scale = self.logit_scale.exp()
         logits = logit_scale * image_features @ text_features.t()
         logits_local = logit_scale * local_image_features @ text_features.T
 
-        return logits, logits_local
+        return logits, logits_local, image_features, local_image_features
 
 
 @TRAINER_REGISTRY.register()
@@ -333,7 +440,6 @@ class AdaClip(TrainerX):
         cfg = self.cfg
         classnames = self.dm.dataset.classnames
 
-        self.lambda_value = cfg.lambda_value
         self.top_k = cfg.topk
 
         print(f"Loading CLIP (backbone: {cfg.MODEL.BACKBONE.NAME})")
@@ -386,6 +492,38 @@ class AdaClip(TrainerX):
         if device_count > 1:
             print(f"Multiple GPUs detected (n_gpus={device_count}), use all of them!")
             self.model = nn.DataParallel(self.model)
+            
+    def compute_class_prototypes(self):
+        
+        all_features, all_labels = [], []
+        for epoch in range(2):
+            for batch_idx, batch in enumerate(self.train_loader_x):
+                image, label = self.parse_batch_train(batch)
+                
+                if isinstance(image, tuple) or isinstance(image, list):  # Two-crop augmentation scenario
+                    global_crop, local_crop = image
+                else:
+                    global_crop = image
+
+                with torch.no_grad():
+                    _, _, feature, _ = self.model(global_crop.type(self.model.dtype))
+
+                all_features.append(feature)
+                all_labels.append(label)
+            
+        # Concatenate all features and labels
+        all_features = torch.cat(all_features, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
+
+        prototypes = torch.zeros(self.num_classes, all_features.shape[1]).type(self.model.dtype).to(self.device)
+        for class_idx in range(self.num_classes):
+            class_mask = (all_labels == class_idx)
+            class_features = all_features[class_mask]
+            
+            if class_features.size(0) > 0:  # Avoid division by zero in case of empty class
+                prototypes[class_idx] = class_features.mean(dim=0)  # Compute the mean feature vector
+        
+        self.model.prototypes = prototypes / prototypes.norm(dim=-1, keepdim=True)
 
     def forward_backward(self, batch):
         image, label = self.parse_batch_train(batch)
@@ -397,22 +535,36 @@ class AdaClip(TrainerX):
             if isinstance(image, tuple) or isinstance(image, list):  # Two-crop augmentation scenario
                 global_crop, local_crop = image
 
-                output, _ = self.model(global_crop)
-                output_local, _ = self.model(local_crop, use_ori_clip=True)
+                output, _, image_feats, _ = self.model(global_crop)
+                output_local, _, image_feats_local, _ = self.model(local_crop)
 
                 # Calculate loss (for global crop)
                 loss_id = F.cross_entropy(output, label)
+                
+                if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
+                    with torch.no_grad():
+                        output0, _, image_feats0, _ = self.model(global_crop, use_ori_clip=True)
+                        output_local0, _, image_feats_local0, _ = self.model(local_crop, use_ori_clip=True)
+                    # Contrastive loss 
+                    ConLoss = SupConLoss(temperature=self.cfg.temp_ct)
+                    loss_ct = ConLoss(torch.cat([image_feats.unsqueeze(1), image_feats_local.unsqueeze(1)], dim=1), labels=label)
+                    # Distillation Loss
+                    loss_dt = ( mse_loss(image_feats, image_feats0) + mse_loss(image_feats_local, image_feats_local0) ) * 10
+                else:
+                    loss_ct = torch.tensor(0.0, device=loss_id.device)
+                    loss_dt = torch.tensor(0.0, device=loss_id.device)
+                
+                loss = loss_id + self.cfg.lambda_ct * loss_ct + self.cfg.lambda_dt * loss_dt
                 # Calculate OOD regularization loss (for local crop)
-                loss_en = -entropy_select_topk(output_local, self.top_k, label)
-
-                # Calculate total loss
-                loss = loss_id + self.lambda_value * loss_en
+                # loss_en = -entropy_select_topk(output_local, self.top_k, label)
+                # loss = loss_id + self.lambda_value * loss_en
                 
             else:
-                output, output_local = self.model(image)
+                output, output_local, _, _ = self.model(image)
+                
                 # calculate CoOp loss
                 loss_id = F.cross_entropy(output, label)
-
+                
                 # calculate OOD regularization loss
                 batch_size, num_of_local_feature = output_local.shape[0], output_local.shape[1]
                 output_local = output_local.view(batch_size * num_of_local_feature, -1)
@@ -432,7 +584,8 @@ class AdaClip(TrainerX):
         loss_summary = {
             "loss": loss.item(),
             "loss_id": loss_id.item(),
-            "loss_en": loss_en.item(),
+            "loss_ct": loss_ct.item(),
+            "loss_dt": loss_dt.item(),
             "acc": compute_accuracy(output, label)[0].item(),
         }
 
@@ -451,18 +604,17 @@ class AdaClip(TrainerX):
         label = label.to(self.device)
         return input, label
 
-    def load_model(self, directory, epoch=None):
+    def load_model(self, directory, epoch=None, module_name=None):
         if not directory:
             print("Note that load_model() is skipped as no pretrained model is given")
             return
 
-        names = self.get_model_names()
-
-        # By default, the best model is loaded
-        model_file = "model-best.pth.tar"
+        names = self.get_model_names() if module_name is None else [module_name]
 
         if epoch is not None:
             model_file = "model.pth.tar-" + str(epoch)
+        else: 
+            model_file = "model-best.pth.tar"
 
         for name in names:
             model_path = osp.join(directory, name, model_file)
@@ -505,7 +657,7 @@ class AdaClip(TrainerX):
         for batch_idx, batch in enumerate(tqdm(data_loader)):
             input, label = self.parse_batch_test(batch)
             output = self.model_inference(input)
-            if len(output) == 2:
+            if len(output) >= 2:
                 output = output[0]
             self.evaluator.process(output, label)
 
@@ -528,19 +680,28 @@ class AdaClip(TrainerX):
 
         glmcm_score = []
         mcm_score = []
+        mcm_score_im = []
         for batch_idx, (images, labels, *id_flag) in enumerate(data_loader):
             images = images.cuda()
-            output, output_local = self.model_inference(images)
+            output, output_local, image_features, _ = self.model_inference(images)
+            output_im =  image_features @ self.model.prototypes.T
+            
             output /= 100.0
             output_local /= 100.0
+            
             smax_global = to_np(F.softmax(output/T, dim=-1))
             smax_local = to_np(F.softmax(output_local/T, dim=-1))
+            smax_global_im = to_np(F.softmax(output_im/T, dim=-1))
+            
             mcm_global_score = -np.max(smax_global, axis=1)
             mcm_local_score = -np.max(smax_local, axis=(1, 2))
+            mcm_global_im = -np.max(smax_global_im, axis=1)
+            
             mcm_score.append(mcm_global_score)
             glmcm_score.append(mcm_global_score+mcm_local_score)
+            mcm_score_im.append(mcm_global_im)
 
-        return concat(mcm_score)[:len(data_loader.dataset)].copy(), concat(glmcm_score)[:len(data_loader.dataset)].copy()
+        return concat(mcm_score).copy(), concat(glmcm_score).copy(), concat(mcm_score_im).copy()
 
     @torch.no_grad()
     def test_visualize(self, img_path, label):
@@ -603,7 +764,7 @@ class AdaClip(TrainerX):
             self.run_epoch()
             self.after_epoch()
             
-            if (self.epoch + 1) % 10 == 0:
+            if self.epoch==0 or (self.epoch + 1) % 10 == 0:
                 print(f"Running eval_ood at epoch {self.epoch + 1}")
                 self.eval_ood(args)
         self.after_train()
@@ -611,6 +772,7 @@ class AdaClip(TrainerX):
     
     def eval_ood(self, args):
         self.set_model_mode("eval")
+        self.compute_class_prototypes()
         
         if args.in_dataset in ['imagenet']:
             out_datasets = ['iNaturalist', 'SUN', 'places365', 'Texture']
@@ -618,35 +780,43 @@ class AdaClip(TrainerX):
         _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
 
         id_data_loader = set_val_loader(args, preprocess)
-        in_score_mcm, in_score_gl = self.test_ood(id_data_loader, args.T)
+        in_score_mcm, in_score_gl, in_score_im = self.test_ood(id_data_loader, args.T)
 
         auroc_list_mcm, aupr_list_mcm, fpr_list_mcm = [], [], []
         auroc_list_gl, aupr_list_gl, fpr_list_gl = [], [], []
+        auroc_list_im, aupr_list_im, fpr_list_im = [], [], []
 
-        for out_dataset in out_datasets:
+        for idx, out_dataset in enumerate(out_datasets):
             print(f"Evaluting OOD dataset {out_dataset}")
             ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
-            out_score_mcm, out_score_gl = self.test_ood(ood_loader, args.T)
+            out_score_mcm, out_score_gl, out_score_im = self.test_ood(ood_loader, args.T)
+            print(f"====== ID score: {stats.describe(in_score_mcm)}, {out_dataset} OD score: {stats.describe(out_score_mcm)}")
+            print(f"====== ID score: {stats.describe(in_score_im)}, {out_dataset} OD score: {stats.describe(out_score_im)}")
 
-            print("MCM score")
-            get_and_print_results(args, in_score_mcm, out_score_mcm,
-                                auroc_list_mcm, aupr_list_mcm, fpr_list_mcm)
+            print(">>>MCM score")
+            get_and_print_results(args, in_score_mcm, out_score_mcm, auroc_list_mcm, aupr_list_mcm, fpr_list_mcm)
+            
+            print(">>>IMG score")
+            get_and_print_results(args, in_score_im, out_score_im, auroc_list_im, aupr_list_im, fpr_list_im)
 
             print("GL-MCM score")
-            get_and_print_results(args, in_score_gl, out_score_gl,
-                                auroc_list_gl, aupr_list_gl, fpr_list_gl)
-            
-            
+            get_and_print_results(args, in_score_gl, out_score_gl, auroc_list_gl, aupr_list_gl, fpr_list_gl)
 
             if self.epoch == self.max_epoch - 1:
                 plot_distribution(args, in_score_mcm, out_score_mcm, out_dataset, score='MCM')
                 plot_distribution(args, in_score_gl, out_score_gl, out_dataset, score='GLMCM')
 
         print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_mcm), np.mean(auroc_list_mcm), np.mean(aupr_list_mcm)))
+        print("MCM_IM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_im), np.mean(auroc_list_im), np.mean(aupr_list_im)))
         print("GL-MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_gl), np.mean(auroc_list_gl), np.mean(aupr_list_gl)))
         wandb.log({"mcm/fpr": np.mean(fpr_list_mcm),
                    "mcm/auroc": np.mean(auroc_list_mcm), 
                    "mcm/aupr": np.mean(aupr_list_mcm)
+                   }, step=(1 + self.epoch) * self.num_batches)
+        
+        wandb.log({"im/fpr": np.mean(fpr_list_im),
+                   "im/auroc": np.mean(auroc_list_im),
+                   "im/aupr": np.mean(aupr_list_im)
                    }, step=(1 + self.epoch) * self.num_batches)
 
         wandb.log({"gl-mcm/fpr": np.mean(fpr_list_gl),

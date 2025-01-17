@@ -6,7 +6,7 @@ from torch.utils.data import Dataset as TorchDataset
 from dassl.utils import read_image
 
 from .datasets import build_dataset
-from .samplers import build_sampler
+from .samplers import build_sampler, ClassAwareSampler
 from .transforms import INTERPOLATION_MODES, build_transform
 
 
@@ -35,14 +35,25 @@ def build_data_loader(
         dataset_wrapper = DatasetWrapper
 
     # Build data loader
-    data_loader = torch.utils.data.DataLoader(
-        dataset_wrapper(cfg, data_source, transform=tfm, is_train=is_train),
-        batch_size=batch_size,
-        sampler=sampler,
-        num_workers=cfg.DATALOADER.NUM_WORKERS,
-        drop_last=is_train and len(data_source) >= batch_size,
-        pin_memory=(torch.cuda.is_available() and cfg.USE_CUDA)
-    )
+    if isinstance(sampler, ClassAwareSampler):
+        # If the sampler is a batch sampler, use `batch_sampler`
+        data_loader = torch.utils.data.DataLoader(
+            dataset_wrapper(cfg, data_source, transform=tfm, is_train=is_train),
+            batch_sampler=sampler,  # Use `batch_sampler` for batch samplers
+            num_workers=cfg.DATALOADER.NUM_WORKERS,
+            pin_memory=(torch.cuda.is_available() and cfg.USE_CUDA)
+        )
+    else:
+        # For standard samplers, use `sampler` and specify `batch_size`
+        data_loader = torch.utils.data.DataLoader(
+            dataset_wrapper(cfg, data_source, transform=tfm, is_train=is_train),
+            batch_size=batch_size,
+            sampler=sampler,
+            num_workers=cfg.DATALOADER.NUM_WORKERS,
+            drop_last=is_train and len(data_source) >= batch_size,
+            pin_memory=(torch.cuda.is_available() and cfg.USE_CUDA)
+        )
+
     assert len(data_loader) > 0
 
     return data_loader

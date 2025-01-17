@@ -1,5 +1,6 @@
 import copy
 import numpy as np
+from itertools import cycle, islice
 import random
 from collections import defaultdict
 from torch.utils.data.sampler import Sampler, RandomSampler, SequentialSampler
@@ -178,6 +179,75 @@ class RandomClassSampler(Sampler):
         return self.length
 
 
+
+class ClassAwareSampler(Sampler):
+    def __init__(self, datasource, batch_size, num_samples_per_class=2):
+        """
+        Args:
+            datasource: List of datum objects. Each datum must have a `label` attribute.
+            num_samples_per_class: Number of samples per class in each batch.
+            num_classes_in_batch: Number of classes to sample per batch.
+        """
+        self.datasource = datasource
+        self.batch_size = batch_size
+        self.num_samples_per_class = num_samples_per_class
+        self.num_classes_in_batch = self.batch_size // num_samples_per_class
+        self.class_to_indices = self._get_class_to_indices()
+        self.all_classes = list(self.class_to_indices.keys())  # List of all class labels
+        self.num_samples = len(self.datasource)
+
+        # Sanity check: Ensure we do not sample more classes than available
+        if self.num_classes_in_batch > len(self.all_classes):
+            raise ValueError(f"num_classes_in_batch ({self.num_classes_in_batch}) exceeds the number of classes ({len(self.all_classes)}).")
+
+    def _get_class_to_indices(self):
+        """
+        Groups indices of datasource by class labels.
+        Returns: A dictionary mapping class labels to a list of indices.
+        """
+        class_to_indices = {}
+        for idx, datum in enumerate(self.datasource):
+            label = datum.label  # Get the class label of the datum
+            if label not in class_to_indices:
+                class_to_indices[label] = []
+            class_to_indices[label].append(idx)
+        return class_to_indices
+
+    def __iter__(self):
+        """
+        Dynamically yield batches of indices with equal sampling within each class for one epoch.
+        """
+        # Shuffle classes at the start of the epoch
+        class_order = cycle(np.random.permutation(self.all_classes))
+
+        # Shuffle indices for each class and create iterators
+        class_iters = {
+            cls: cycle(np.random.permutation(self.class_to_indices[cls]))
+            for cls in self.all_classes
+        }
+
+        total_batches = self.__len__()
+        for i in range(total_batches):
+            # Select a subset of classes for the current batch
+            selected_classes = list(islice(class_order, self.num_classes_in_batch))
+            current_batch = []
+
+            for cls in selected_classes:
+                current_batch.extend(
+                    islice(class_iters[cls], self.num_samples_per_class)
+                )
+
+            yield current_batch
+
+    def __len__(self):
+        """
+        Returns the total number of batches.
+        """
+        batch_size = self.num_classes_in_batch * self.num_samples_per_class
+        return (self.num_samples + batch_size - 1) // batch_size  # Round up to account for remainder
+
+
+
 def build_sampler(
     sampler_type,
     cfg=None,
@@ -200,6 +270,9 @@ def build_sampler(
 
     elif sampler_type == "RandomClassSampler":
         return RandomClassSampler(data_source, batch_size, n_ins)
+    
+    elif sampler_type == 'ClassAwareSampler':
+        return ClassAwareSampler(data_source, batch_size, num_samples_per_class=2)
 
     else:
         raise ValueError("Unknown sampler type: {}".format(sampler_type))

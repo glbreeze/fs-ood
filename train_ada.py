@@ -48,8 +48,14 @@ def reset_cfg(cfg, args):
     if args.head:
         cfg.MODEL.HEAD.NAME = args.head
 
-    if args.lambda_value:
-        cfg.lambda_value = args.lambda_value
+    if args.lambda_ct:
+        cfg.lambda_ct = args.lambda_ct
+    
+    if args.lambda_dt:
+        cfg.lambda_dt = args.lambda_dt
+    
+    if args.temp_ct:
+        cfg.temp_ct = args.temp_ct
 
     if args.topk:
         cfg.topk = args.topk
@@ -163,7 +169,8 @@ def main(args):
     print_args(args, cfg)
     print("Collecting env info ...")
     print("** System info **\n{}\n".format(collect_env_info()))
-    
+
+
     os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
     os.environ["WANDB_MODE"] = "online"  # "dryrun"
     os.environ["WANDB_CACHE_DIR"] = "/scratch/lg154/sseg/.cache/wandb"
@@ -180,7 +187,7 @@ def main(args):
         return
     if cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER and (not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER):
         assert args.text_adapter_dir is not None, "text_adapter_dir must be specified when using a pretrained text adapter."
-        trainer.load_model(args.text_adapter_dir, epoch=args.load_epoch)
+        trainer.load_model(args.text_adapter_dir, epoch=args.load_epoch, module_name='text_adapter')
     
     if not args.no_train:
         trainer.train(args)
@@ -214,7 +221,7 @@ if __name__ == "__main__":
     parser.add_argument("--eval-only", action="store_true", help="evaluation only")
     parser.add_argument("--model-dir", type=str, default="", help="load model from this directory for eval-only mode",)
     parser.add_argument("--text-adapter-dir", type=str, default="", help="load model from this directory for eval-only mode",)
-    parser.add_argument("--load-epoch", type=int, help="load model weights at this epoch for evaluation")
+    parser.add_argument("--load-epoch", default=50, type=int, help="load model weights at this epoch for evaluation")
     parser.add_argument("--no-train", action="store_true", help="do not call trainer.train()")
     
     parser.add_argument(
@@ -224,10 +231,10 @@ if __name__ == "__main__":
         help="modify config options using the command-line",
     )
     # augment for LoCoOp
-    parser.add_argument('--lambda_value', type=float, default=0.25,
-                        help='weight for regulization loss')
-    parser.add_argument('--topk', type=int, default=200,
-                        help='topk for extracted OOD regions')
+    parser.add_argument('--lambda_ct', type=float, default=1.0,help='weight for contrastive loss')
+    parser.add_argument('--lambda_dt', type=float, default=1.0,help='weight for distillation loss')
+    parser.add_argument('--temp_ct', default=0.07, type=float)
+    parser.add_argument('--topk', type=int, default=200, help='topk for extracted OOD regions')
     
     # augment for MCM and GL-MCM
     parser.add_argument('--in_dataset', default='imagenet', type=str,
