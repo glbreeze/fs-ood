@@ -7,6 +7,7 @@ from torch.nn import functional as F
 from torch.nn.functional import mse_loss
 from torch.cuda.amp import GradScaler, autocast
 from scipy import stats
+from sklearn.manifold import TSNE
 
 import clip_w_local
 from utils.detection_util import get_and_print_results
@@ -369,6 +370,7 @@ class CustomCLIP(nn.Module):
         self.text_encoder = TextEncoder(clip_model)
         self.logit_scale = clip_model.logit_scale
         self.dtype = clip_model.dtype
+        self.clip_token_embedding = clip_model.token_embedding
         
         if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
             self.prompt_learner = PromptLearner(cfg, classnames, clip_model)
@@ -494,7 +496,7 @@ class AdaClip(TrainerX):
             self.model = nn.DataParallel(self.model)
             
     def compute_class_prototypes(self):
-        
+        self.set_model_mode("eval")
         all_features, all_labels = [], []
         for epoch in range(2):
             for batch_idx, batch in enumerate(self.train_loader_x):
@@ -680,28 +682,29 @@ class AdaClip(TrainerX):
 
         glmcm_score = []
         mcm_score = []
-        mcm_score_im = []
+        im_score = []
+        
         for batch_idx, (images, labels, *id_flag) in enumerate(data_loader):
             images = images.cuda()
             output, output_local, image_features, _ = self.model_inference(images)
-            output_im =  image_features @ self.model.prototypes.T
+            
+            im_sim =  image_features @ self.model.prototypes.T
+            im_sim, _ = torch.max(im_sim, dim=-1)
+            im_score.append(-im_sim.cpu().numpy())
             
             output /= 100.0
             output_local /= 100.0
             
             smax_global = to_np(F.softmax(output/T, dim=-1))
             smax_local = to_np(F.softmax(output_local/T, dim=-1))
-            smax_global_im = to_np(F.softmax(output_im/T, dim=-1))
             
             mcm_global_score = -np.max(smax_global, axis=1)
             mcm_local_score = -np.max(smax_local, axis=(1, 2))
-            mcm_global_im = -np.max(smax_global_im, axis=1)
             
             mcm_score.append(mcm_global_score)
             glmcm_score.append(mcm_global_score+mcm_local_score)
-            mcm_score_im.append(mcm_global_im)
 
-        return concat(mcm_score).copy(), concat(glmcm_score).copy(), concat(mcm_score_im).copy()
+        return concat(mcm_score).copy(), concat(glmcm_score).copy(), concat(im_score).copy()
 
     @torch.no_grad()
     def test_visualize(self, img_path, label):
@@ -809,6 +812,8 @@ class AdaClip(TrainerX):
         print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_mcm), np.mean(auroc_list_mcm), np.mean(aupr_list_mcm)))
         print("MCM_IM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_im), np.mean(auroc_list_im), np.mean(aupr_list_im)))
         print("GL-MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_gl), np.mean(auroc_list_gl), np.mean(aupr_list_gl)))
+        if not hasattr(self, 'num_batches'):
+            self.num_batches = len(self.train_loader_x)
         wandb.log({"mcm/fpr": np.mean(fpr_list_mcm),
                    "mcm/auroc": np.mean(auroc_list_mcm), 
                    "mcm/aupr": np.mean(aupr_list_mcm)
@@ -823,3 +828,140 @@ class AdaClip(TrainerX):
                    "gl-mcm/auroc": np.mean(auroc_list_gl), 
                    "gl-mcm/aupr": np.mean(aupr_list_gl)
                    }, step=(1 + self.epoch) * self.num_batches)
+        
+        
+    def eval_ood1(self, args):
+        self.set_model_mode("eval")
+        _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
+        
+        num_classes = 50
+        out_dataset = 'iNaturalist'
+        id_loader = set_val_loader(args, preprocess, subset=True, num_classes=num_classes)
+        od_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
+
+        def get_feats(data_loader, T=1, datum=False):
+            mcm_scores = []
+            image_feats = []
+            all_labels = []
+            self.set_model_mode("eval")
+            self.evaluator.reset()
+            
+            with torch.no_grad():
+                for batch_idx, batch in enumerate(data_loader):
+                    if datum:
+                        images, labels = batch["img"], batch["label"]
+                    else:
+                        images, labels = batch
+                    
+                    if images.ndim == 5:
+                        labels = labels.repeat_interleave(images.shape[1]) 
+                        images = images.view(-1, images.shape[-3], images.shape[-2], images.shape[-1])  # Flatten the second dimension
+                        
+                    images = images.cuda()
+                    output, _, image_feature, _ = self.model_inference(images)
+                    
+                    output /= 100.0
+                    smax_global = F.softmax(output/T, dim=-1)
+                    max_values, _ = torch.max(smax_global, dim=1)
+                    mcm_global_score = -max_values
+                    
+                    mcm_scores.append(mcm_global_score.cpu())
+                    image_feats.append(image_feature.cpu())
+                    all_labels.append(labels)
+                    
+                    del images, output, image_feature, smax_global, max_values, mcm_global_score, labels
+                    torch.cuda.empty_cache()
+                
+            return torch.cat(mcm_scores, dim=0), torch.cat(image_feats, dim=0), torch.cat(all_labels, dim=0)
+        
+        id_mcm, id_feats, id_labels = get_feats(id_loader)
+        od_mcm, od_feats, od_labels = get_feats(od_loader)
+        id_mcm_tr, id_feats_tr, id_labels_tr = get_feats(self.train_loader_x, datum=True)
+        
+        class_prototypes = []
+        for cls in range(num_classes):
+            class_indices = (id_labels_tr == cls).nonzero(as_tuple=True)[0]
+            class_features = id_feats_tr[class_indices]
+            class_prototypes.append(class_features.mean(dim=0))
+
+        proto = torch.stack(class_prototypes, dim=0)
+        
+        # === text embedding 
+        with torch.no_grad():
+            embeddings = self.model.prompt_learner()
+            text_feats = self.model.text_encoder(embeddings, self.model.tokenized_prompts)
+            
+        # ============== 
+        import matplotlib.pyplot as plt
+        text_feats = text_feats[:num_classes]
+        all_feats = torch.cat([id_feats_tr, id_feats, od_feats, text_feats], dim=0)
+        od_labels = torch.full((len(od_feats),), -1, dtype=torch.long, device=id_labels.device)
+        text_labels = torch.arange(num_classes, dtype=torch.long, device=id_labels.device)
+        
+        all_labels = torch.cat([id_labels_tr, id_labels, od_labels, text_labels])
+        all_feats, all_labels = all_feats.cpu().numpy(), all_labels.cpu().numpy()
+
+        tsne = TSNE(n_components=2, random_state=42)
+        tsne_results = tsne.fit_transform(all_feats)
+
+        plt.figure(figsize=(12, 10), dpi=300)
+
+        # Plot in-distribution training features
+        plt.scatter(tsne_results[:len(id_feats_tr), 0], tsne_results[:len(id_feats_tr), 1],
+                    c=all_labels[:len(id_feats_tr)], cmap='tab10', label='In-distribution (Train)', alpha=0.6, marker='o', s=20)
+
+        # Plot in-distribution validation features
+        start_idx = len(id_feats_tr)
+        end_idx = start_idx + len(id_feats)
+        plt.scatter(tsne_results[start_idx:end_idx, 0], tsne_results[start_idx:end_idx, 1],
+                    c=all_labels[start_idx:end_idx], cmap='tab10', label='In-distribution (Val)', alpha=0.6, marker='v', s=20)
+
+        # Plot out-of-distribution features
+        start_idx = end_idx
+        end_idx = start_idx + len(od_feats)
+        plt.scatter(tsne_results[start_idx:end_idx, 0], tsne_results[start_idx:end_idx, 1],
+                    c='gray', label='Out-of-distribution', alpha=0.6, marker='x', s=20)
+
+        # Plot text features
+        start_idx = end_idx
+        plt.scatter(tsne_results[start_idx:, 0], tsne_results[start_idx:, 1],
+                    c=all_labels[start_idx:] % 10, cmap='tab10', label='Text-feats', alpha=0.6, marker='s', s=20)
+
+        # Labeling and legend
+        plt.title('t-SNE Visualization of Image and Text Embeddings')
+        plt.xlabel('t-SNE Component 1')
+        plt.ylabel('t-SNE Component 2')
+        plt.legend()
+        
+        plt.savefig('tsne_plot.png')
+        
+        id_sim = id_feats @ id_feats_tr.T
+        
+        od_sim = od_feats @ id_feats_tr.T
+            
+        
+        self.compute_class_prototypes()
+        
+        id_sim = id_feats @ self.model.prototypes.cpu().T
+        od_sim = od_feats @ self.model.prototypes.cpu().T
+        
+        id_sim_max, _ = torch.max(id_sim, dim=-1)
+        od_sim_max, _ = torch.max(od_sim, dim=-1)
+        
+        
+        stats.describe(id_mcm.cpu().numpy())
+        stats.describe(od_mcm.cpu().numpy())
+        
+        stats.describe(id_sim_max.cpu().numpy())
+        stats.describe(od_sim_max.cpu().numpy())
+        
+        tp = od_feats @ proto[950:1000].T
+        tp1, _ = torch.max(tp, dim=-1)
+        stats.describe(tp1.cpu().numpy())
+        
+        
+        
+        torch.save({'id_mcm_score': id_mcm, 'id_feats': id_feats}, 'id_features.pth')
+        torch.save({'od_mcm_score': od_mcm, 'od_feats': od_feats}, 'od_features.pth')
+        
+        

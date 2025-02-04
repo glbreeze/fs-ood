@@ -147,7 +147,7 @@ class OxfordPets(DatasetBase):
             args: a list of datasets, e.g. train, val and test.
             subsample (str): what classes to subsample.
         """
-        assert subsample in ["all", "base", "new"]
+        assert subsample in ["all", "base", "new", "few"]
 
         if subsample == "all":
             return args
@@ -165,6 +165,8 @@ class OxfordPets(DatasetBase):
         print(f"SUBSAMPLE {subsample.upper()} CLASSES!")
         if subsample == "base":
             selected = labels[:m]  # take the first half
+        elif subsample == "few":
+            selected = labels[-50:]
         else:
             selected = labels[m:]  # take the second half
         relabeler = {y: y_new for y_new, y in enumerate(selected)}

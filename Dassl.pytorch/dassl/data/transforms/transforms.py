@@ -199,6 +199,20 @@ class TwoCropTransform:
         return global_crop, local_crop
 
 
+class MultiCropTransfrom:
+    def __init__(self, base_transform, num_crops=5):
+        self.num_crops = num_crops
+        self.base_transform = base_transform
+
+    def __call__(self, image):
+        """
+        Args: image (PIL.Image): Input image.
+        Returns: Tensor of shape (num_crops, C, H, W) containing the crops.
+        """
+        crops = [self.base_transform(image) for _ in range(self.num_crops)]
+        return torch.stack(crops)
+
+
 def build_transform(cfg, is_train=True, choices=None):
     """Build transformation function.
 
@@ -394,6 +408,9 @@ def _build_transform_train(cfg, choices, target_size, normalize):
             tfm_train += [InstanceNormalization()]
 
         tfm_train = Compose(tfm_train)
+        
+        if cfg.INPUT.NUM_CROPS >= 2: 
+            tfm_train = MultiCropTransfrom(tfm_train, num_crops=cfg.INPUT.NUM_CROPS)
 
     return tfm_train
 
