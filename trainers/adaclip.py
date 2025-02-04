@@ -387,8 +387,7 @@ class CustomCLIP(nn.Module):
             else:
                 print(f"Computing and saving text features to {text_feat_file}")
                 with torch.no_grad():
-                    embeddings = clip_model.token_embedding(tokenized_prompts).type(clip_model.dtype)
-                    self.text_features = self.text_encoder(embeddings, tokenized_prompts)
+                    self.text_features = clip_model.encode_text(tokenized_prompts).type(clip_model.dtype)
                     torch.save(self.text_features, text_feat_file)
         
         if cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER:

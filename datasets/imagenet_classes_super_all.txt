@@ -1,0 +1,1000 @@
+n01440764 tench,fish,teleost_fish,soft-finned_fish,cypriniform_fish,cyprinid
+n01443537 goldfish,fish,teleost_fish,soft-finned_fish,cypriniform_fish,cyprinid
+n01484850 great white shark,fish,cartilaginous_fish,elasmobranch,shark,mackerel_shark
+n01491361 tiger shark,fish,cartilaginous_fish,elasmobranch,shark,requiem_shark
+n01494475 hammerhead shark,fish,fish,cartilaginous_fish,elasmobranch,shark
+n01496331 electric ray,fish,cartilaginous_fish,elasmobranch,ray
+n01498041 stingray,fish,cartilaginous_fish,elasmobranch,ray
+n01514668 rooster,animal,chordate,vertebrate,bird
+n01514859 hen,animal,chordate,vertebrate,bird
+n01518878 ostrich,chordate,vertebrate,bird,ratite
+n01530575 brambling,bird,passerine,oscine,finch
+n01531178 goldfinch,bird,passerine,oscine,finch
+n01532829 house finch,bird,passerine,oscine,finch
+n01534433 junco,bird,passerine,oscine,finch
+n01537544 indigo bunting,bird,passerine,oscine,finch,bunting
+n01558993 American robin,bird,passerine,oscine,thrush
+n01560419 bulbul,bird,passerine,oscine,thrush,nightingale
+n01580077 jay,bird,passerine,oscine,corvine_bird
+n01582220 magpie,bird,passerine,oscine,corvine_bird
+n01592084 chickadee,bird,passerine,oscine,titmouse
+n01601694 American dipper,vertebrate,bird,passerine,oscine
+n01608432 kite (bird of prey),vertebrate,bird,bird_of_prey,hawk
+n01614925 bald eagle,vertebrate,bird,bird_of_prey,eagle
+n01616318 vulture,chordate,vertebrate,bird,bird_of_prey
+n01622779 great grey owl,vertebrate,bird,bird_of_prey,owl
+n01629819 fire salamander,chordate,vertebrate,amphibian,salamander
+n01630670 smooth newt,vertebrate,amphibian,salamander,newt
+n01631663 newt,vertebrate,amphibian,salamander,newt
+n01632458 spotted salamander,vertebrate,amphibian,salamander,ambystomid
+n01632777 axolotl,vertebrate,amphibian,salamander,ambystomid
+n01641577 American bullfrog,vertebrate,amphibian,frog,true_frog
+n01644373 tree frog,chordate,vertebrate,amphibian,frog
+n01644900 tailed frog,chordate,vertebrate,amphibian,frog
+n01664065 loggerhead sea turtle,anapsid,chelonian,turtle,sea_turtle
+n01665541 leatherback sea turtle,anapsid,chelonian,turtle,sea_turtle
+n01667114 mud turtle,reptile,anapsid,chelonian,turtle
+n01667778 terrapin,reptile,anapsid,chelonian,turtle
+n01669191 box turtle,reptile,anapsid,chelonian,turtle
+n01675722 banded gecko,diapsid,saurian,lizard,gecko
+n01677366 green iguana,diapsid,saurian,lizard,iguanid
+n01682714 Carolina anole,diapsid,saurian,lizard,iguanid
+n01685808 desert grassland whiptail lizard,diapsid,saurian,lizard,teiid_lizard
+n01687978 agama,diapsid,saurian,lizard,agamid
+n01688243 frilled-necked lizard,diapsid,saurian,lizard,agamid
+n01689811 alligator lizard,diapsid,saurian,lizard,anguid_lizard
+n01692333 Gila monster,diapsid,saurian,lizard,venomous_lizard
+n01693334 European green lizard,diapsid,saurian,lizard,lacertid_lizard
+n01694178 chameleon,diapsid,saurian,lizard,chameleon
+n01695060 Komodo dragon,diapsid,saurian,lizard,monitor
+n01697457 Nile crocodile,reptile,diapsid,crocodilian_reptile,crocodile
+n01698640 American alligator,reptile,diapsid,crocodilian_reptile,alligator
+n01704323 triceratops,archosaur,dinosaur,ornithischian,ceratopsian
+n01728572 worm snake,reptile,diapsid,snake,colubrid_snake
+n01728920 ring-necked snake,reptile,diapsid,snake,colubrid_snake
+n01729322 eastern hog-nosed snake,reptile,diapsid,snake,colubrid_snake
+n01729977 smooth green snake,reptile,diapsid,snake,colubrid_snake
+n01734418 kingsnake,reptile,diapsid,snake,colubrid_snake
+n01735189 garter snake,reptile,diapsid,snake,colubrid_snake
+n01737021 water snake,reptile,diapsid,snake,colubrid_snake
+n01739381 vine snake,reptile,diapsid,snake,colubrid_snake
+n01740131 night snake,reptile,diapsid,snake,colubrid_snake
+n01742172 boa constrictor,diapsid,snake,constrictor,boa
+n01744401 African rock python,snake,constrictor,boa,python
+n01748264 Indian cobra,diapsid,snake,elapid,cobra
+n01749939 green mamba,snake,elapid,mamba,black_mamba
+n01751748 sea snake,vertebrate,reptile,diapsid,snake
+n01753488 Saharan horned viper,reptile,diapsid,snake,viper
+n01755581 eastern diamondback rattlesnake,snake,viper,pit_viper,rattlesnake
+n01756291 sidewinder rattlesnake,snake,viper,pit_viper,rattlesnake
+n01768244 trilobite,organism,animal,invertebrate,arthropod
+n01770081 harvestman,animal,invertebrate,arthropod,arachnid
+n01770393 scorpion,animal,invertebrate,arthropod,arachnid
+n01773157 yellow garden spider,invertebrate,arthropod,arachnid,spider
+n01773549 barn spider,invertebrate,arthropod,arachnid,spider
+n01773797 European garden spider,invertebrate,arthropod,arachnid,spider
+n01774384 southern black widow,invertebrate,arthropod,arachnid,spider
+n01774750 tarantula,invertebrate,arthropod,arachnid,spider
+n01775062 wolf spider,invertebrate,arthropod,arachnid,spider
+n01776313 tick,invertebrate,arthropod,arachnid,acarine
+n01784675 centipede,organism,animal,invertebrate,arthropod
+n01795545 black grouse,bird,gallinaceous_bird,game_bird,grouse
+n01796340 ptarmigan,bird,gallinaceous_bird,game_bird,grouse
+n01797886 ruffed grouse,bird,gallinaceous_bird,game_bird,grouse
+n01798484 prairie grouse,bird,gallinaceous_bird,game_bird,grouse
+n01806143 peafowl,game_bird,phasianid,pheasant,peafowl
+n01806567 quail,bird,gallinaceous_bird,game_bird,phasianid
+n01807496 partridge,bird,gallinaceous_bird,game_bird,phasianid
+n01817953 african grey parrot,chordate,vertebrate,bird,parrot
+n01818515 macaw,chordate,vertebrate,bird,parrot
+n01819313 sulphur-crested cockatoo,vertebrate,bird,parrot,cockatoo
+n01820546 lorikeet,vertebrate,bird,parrot,lory
+n01824575 coucal,vertebrate,bird,cuculiform_bird,cuckoo
+n01828970 bee eater,chordate,vertebrate,bird,coraciiform_bird
+n01829413 hornbill,chordate,vertebrate,bird,coraciiform_bird
+n01833805 hummingbird,chordate,vertebrate,bird,apodiform_bird
+n01843065 jacamar,chordate,vertebrate,bird,piciform_bird
+n01843383 toucan,chordate,vertebrate,bird,piciform_bird
+n01847000 duck,aquatic_bird,waterfowl,anseriform_bird,duck
+n01855032 red-breasted merganser,anseriform_bird,duck,sea_duck,merganser
+n01855672 goose,bird,aquatic_bird,waterfowl,anseriform_bird
+n01860187 black swan,vertebrate,bird,aquatic_bird,swan
+n01871265 tusker,animal,chordate,vertebrate,mammal
+n01872401 echidna,vertebrate,mammal,prototherian,monotreme
+n01873310 platypus,vertebrate,mammal,prototherian,monotreme
+n01877812 wallaby,mammal,metatherian,marsupial,kangaroo
+n01882714 koala,mammal,metatherian,marsupial,phalanger
+n01883070 wombat,vertebrate,mammal,metatherian,marsupial
+n01910747 jellyfish,organism,animal,invertebrate,coelenterate
+n01914609 sea anemone,animal,invertebrate,coelenterate,anthozoan
+n01917289 brain coral,coelenterate,anthozoan,coral,stony_coral
+n01924916 flatworm,organism,animal,invertebrate,worm
+n01930112 nematode,organism,animal,invertebrate,worm
+n01943899 conch,animal,invertebrate,mollusk,gastropod
+n01944390 snail,animal,invertebrate,mollusk,gastropod
+n01945685 slug,animal,invertebrate,mollusk,gastropod
+n01950731 sea slug,animal,invertebrate,mollusk,gastropod
+n01955084 chiton,organism,animal,invertebrate,mollusk
+n01968897 chambered nautilus,animal,invertebrate,mollusk,cephalopod
+n01978287 Dungeness crab,arthropod,crustacean,decapod_crustacean,crab
+n01978455 rock crab,arthropod,crustacean,decapod_crustacean,crab
+n01980166 fiddler crab,arthropod,crustacean,decapod_crustacean,crab
+n01981276 red king crab,arthropod,crustacean,decapod_crustacean,crab
+n01983481 American lobster,crustacean,decapod_crustacean,lobster,true_lobster
+n01984695 spiny lobster,arthropod,crustacean,decapod_crustacean,lobster
+n01985128 crayfish,invertebrate,arthropod,crustacean,decapod_crustacean
+n01986214 hermit crab,invertebrate,arthropod,crustacean,decapod_crustacean
+n01990800 isopod,invertebrate,arthropod,crustacean,malacostracan_crustacean
+n02002556 white stork,bird,aquatic_bird,wading_bird,stork
+n02002724 black stork,bird,aquatic_bird,wading_bird,stork
+n02006656 spoonbill,vertebrate,bird,aquatic_bird,wading_bird
+n02007558 flamingo,vertebrate,bird,aquatic_bird,wading_bird
+n02009229 little blue heron,bird,aquatic_bird,wading_bird,heron
+n02009912 great egret,aquatic_bird,wading_bird,heron,egret
+n02011460 bittern bird,bird,aquatic_bird,wading_bird,heron
+n02012849 crane bird,vertebrate,bird,aquatic_bird,wading_bird
+n02013706 limpkin,vertebrate,bird,aquatic_bird,wading_bird
+n02017213 common gallinule,bird,aquatic_bird,gallinule,purple_gallinule
+n02018207 American coot,aquatic_bird,wading_bird,rail,coot
+n02018795 bustard,vertebrate,bird,aquatic_bird,wading_bird
+n02025239 ruddy turnstone,wading_bird,shorebird,plover,turnstone
+n02027492 dunlin,aquatic_bird,wading_bird,shorebird,sandpiper
+n02028035 common redshank,aquatic_bird,wading_bird,shorebird,sandpiper
+n02033041 dowitcher,aquatic_bird,wading_bird,shorebird,snipe
+n02037110 oystercatcher,bird,aquatic_bird,wading_bird,shorebird
+n02051845 pelican,bird,aquatic_bird,seabird,pelecaniform_seabird
+n02056570 king penguin,aquatic_bird,seabird,sphenisciform_seabird,penguin
+n02058221 albatross,bird,aquatic_bird,seabird,pelagic_bird
+n02066245 grey whale,aquatic_mammal,cetacean,whale,baleen_whale
+n02071294 killer whale,cetacean,whale,toothed_whale,dolphin
+n02074367 dugong,mammal,placental,aquatic_mammal,sea_cow
+n02077923 sea lion,aquatic_mammal,pinniped_mammal,seal,eared_seal
+n02085620 Chihuahua,animal,domestic_animal,dog,toy_dog
+n02085782 Japanese Chin,animal,domestic_animal,dog,toy_dog
+n02085936 Maltese,animal,domestic_animal,dog,toy_dog
+n02086079 Pekingese,animal,domestic_animal,dog,toy_dog
+n02086240 Shih Tzu,animal,domestic_animal,dog,toy_dog
+n02086646 King Charles Spaniel,dog,toy_dog,toy_spaniel,english_toy_spaniel
+n02086910 Papillon,domestic_animal,dog,toy_dog,toy_spaniel
+n02087046 toy terrier,animal,domestic_animal,dog,toy_dog
+n02087394 Rhodesian Ridgeback,animal,domestic_animal,dog,hunting_dog
+n02088094 Afghan Hound,domestic_animal,dog,hunting_dog,hound
+n02088238 Basset Hound,domestic_animal,dog,hunting_dog,hound
+n02088364 Beagle,domestic_animal,dog,hunting_dog,hound
+n02088466 Bloodhound,domestic_animal,dog,hunting_dog,hound
+n02088632 Bluetick Coonhound,domestic_animal,dog,hunting_dog,hound
+n02089078 Black and Tan Coonhound,dog,hunting_dog,hound,coonhound
+n02089867 Treeing Walker Coonhound,dog,hunting_dog,hound,foxhound
+n02089973 English foxhound,dog,hunting_dog,hound,foxhound
+n02090379 Redbone Coonhound,domestic_animal,dog,hunting_dog,hound
+n02090622 borzoi,dog,hunting_dog,hound,wolfhound
+n02090721 Irish Wolfhound,dog,hunting_dog,hound,wolfhound
+n02091032 Italian Greyhound,dog,hunting_dog,hound,greyhound
+n02091134 Whippet,dog,hunting_dog,hound,greyhound
+n02091244 Ibizan Hound,domestic_animal,dog,hunting_dog,hound
+n02091467 Norwegian Elkhound,domestic_animal,dog,hunting_dog,hound
+n02091635 Otterhound,domestic_animal,dog,hunting_dog,hound
+n02091831 Saluki,domestic_animal,dog,hunting_dog,hound
+n02092002 Scottish Deerhound,domestic_animal,dog,hunting_dog,hound
+n02092339 Weimaraner,domestic_animal,dog,hunting_dog,hound
+n02093256 Staffordshire Bull Terrier,dog,hunting_dog,terrier,bullterrier
+n02093428 American Staffordshire Terrier,dog,hunting_dog,terrier,bullterrier
+n02093647 Bedlington Terrier,domestic_animal,dog,hunting_dog,terrier
+n02093754 Border Terrier,domestic_animal,dog,hunting_dog,terrier
+n02093859 Kerry Blue Terrier,domestic_animal,dog,hunting_dog,terrier
+n02093991 Irish Terrier,domestic_animal,dog,hunting_dog,terrier
+n02094114 Norfolk Terrier,domestic_animal,dog,hunting_dog,terrier
+n02094258 Norwich Terrier,domestic_animal,dog,hunting_dog,terrier
+n02094433 Yorkshire Terrier,domestic_animal,dog,hunting_dog,terrier
+n02095314 Wire Fox Terrier,dog,hunting_dog,terrier,fox_terrier
+n02095570 Lakeland Terrier,dog,hunting_dog,terrier,wirehair
+n02095889 Sealyham Terrier,hunting_dog,terrier,wirehair,welsh_terrier
+n02096051 Airedale Terrier,domestic_animal,dog,hunting_dog,terrier
+n02096177 Cairn Terrier,domestic_animal,dog,hunting_dog,terrier
+n02096294 Australian Terrier,domestic_animal,dog,hunting_dog,terrier
+n02096437 Dandie Dinmont Terrier,domestic_animal,dog,hunting_dog,terrier
+n02096585 Boston Terrier,domestic_animal,dog,hunting_dog,terrier
+n02097047 Miniature Schnauzer,dog,hunting_dog,terrier,schnauzer
+n02097130 Giant Schnauzer,dog,hunting_dog,terrier,schnauzer
+n02097209 Standard Schnauzer,dog,hunting_dog,terrier,schnauzer
+n02097298 Scottish Terrier,domestic_animal,dog,hunting_dog,terrier
+n02097474 Tibetan Terrier,domestic_animal,dog,hunting_dog,terrier
+n02097658 Australian Silky Terrier,domestic_animal,dog,hunting_dog,terrier
+n02098105 Soft-coated Wheaten Terrier,domestic_animal,dog,hunting_dog,terrier
+n02098286 West Highland White Terrier,domestic_animal,dog,hunting_dog,terrier
+n02098413 Lhasa Apso,domestic_animal,dog,hunting_dog,terrier
+n02099267 Flat-Coated Retriever,dog,hunting_dog,sporting_dog,retriever
+n02099429 Curly-coated Retriever,dog,hunting_dog,sporting_dog,retriever
+n02099601 Golden Retriever,dog,hunting_dog,sporting_dog,retriever
+n02099712 Labrador Retriever,dog,hunting_dog,sporting_dog,retriever
+n02099849 Chesapeake Bay Retriever,dog,hunting_dog,sporting_dog,retriever
+n02100236 German Shorthaired Pointer,dog,hunting_dog,sporting_dog,pointer
+n02100583 Vizsla,dog,hunting_dog,sporting_dog,pointer
+n02100735 English Setter,dog,hunting_dog,sporting_dog,setter
+n02100877 Irish Setter,dog,hunting_dog,sporting_dog,setter
+n02101006 Gordon Setter,dog,hunting_dog,sporting_dog,setter
+n02101388 Brittany dog,dog,hunting_dog,sporting_dog,spaniel
+n02101556 Clumber Spaniel,dog,hunting_dog,sporting_dog,spaniel
+n02102040 English Springer Spaniel,hunting_dog,sporting_dog,spaniel,springer_spaniel
+n02102177 Welsh Springer Spaniel,hunting_dog,sporting_dog,spaniel,springer_spaniel
+n02102318 Cocker Spaniel,dog,hunting_dog,sporting_dog,spaniel
+n02102480 Sussex Spaniel,dog,hunting_dog,sporting_dog,spaniel
+n02102973 Irish Water Spaniel,hunting_dog,sporting_dog,spaniel,water_spaniel
+n02104029 Kuvasz,domestic_animal,dog,working_dog,watchdog
+n02104365 Schipperke,domestic_animal,dog,working_dog,watchdog
+n02105056 Groenendael dog,dog,working_dog,shepherd_dog,belgian_sheepdog
+n02105162 Malinois,dog,working_dog,shepherd_dog,belgian_sheepdog
+n02105251 Briard,domestic_animal,dog,working_dog,shepherd_dog
+n02105412 Australian Kelpie,domestic_animal,dog,working_dog,shepherd_dog
+n02105505 Komondor,domestic_animal,dog,working_dog,shepherd_dog
+n02105641 Old English Sheepdog,domestic_animal,dog,working_dog,shepherd_dog
+n02105855 Shetland Sheepdog,domestic_animal,dog,working_dog,shepherd_dog
+n02106030 collie,domestic_animal,dog,working_dog,shepherd_dog
+n02106166 Border Collie,domestic_animal,dog,working_dog,shepherd_dog
+n02106382 Bouvier des Flandres dog,domestic_animal,dog,working_dog,shepherd_dog
+n02106550 Rottweiler,domestic_animal,dog,working_dog,shepherd_dog
+n02106662 German Shepherd Dog,domestic_animal,dog,working_dog,shepherd_dog
+n02107142 Dobermann,dog,working_dog,watchdog,pinscher
+n02107312 Miniature Pinscher,dog,working_dog,watchdog,pinscher
+n02107574 Greater Swiss Mountain Dog,domestic_animal,dog,working_dog,sennenhunde
+n02107683 Bernese Mountain Dog,domestic_animal,dog,working_dog,sennenhunde
+n02107908 Appenzeller Sennenhund,domestic_animal,dog,working_dog,sennenhunde
+n02108000 Entlebucher Sennenhund,domestic_animal,dog,working_dog,sennenhunde
+n02108089 Boxer,animal,domestic_animal,dog,working_dog
+n02108422 Bullmastiff,animal,domestic_animal,dog,working_dog
+n02108551 Tibetan Mastiff,domestic_animal,dog,working_dog,mastiff
+n02108915 French Bulldog,domestic_animal,dog,working_dog,bulldog
+n02109047 Great Dane,animal,domestic_animal,dog,working_dog
+n02109525 St. Bernard,animal,domestic_animal,dog,working_dog
+n02109961 husky,animal,domestic_animal,dog,working_dog
+n02110063 Alaskan Malamute,domestic_animal,dog,working_dog,sled_dog
+n02110185 Siberian Husky,domestic_animal,dog,working_dog,sled_dog
+n02110341 Dalmatian,organism,animal,domestic_animal,dog
+n02110627 Affenpinscher,dog,working_dog,watchdog,pinscher
+n02110806 Basenji,organism,animal,domestic_animal,dog
+n02110958 pug,organism,animal,domestic_animal,dog
+n02111129 Leonberger,organism,animal,domestic_animal,dog
+n02111277 Newfoundland dog,organism,animal,domestic_animal,dog
+n02111500 Great Pyrenees dog,organism,animal,domestic_animal,dog
+n02111889 Samoyed,animal,domestic_animal,dog,spitz
+n02112018 Pomeranian,animal,domestic_animal,dog,spitz
+n02112137 Chow Chow,animal,domestic_animal,dog,spitz
+n02112350 Keeshond,animal,domestic_animal,dog,spitz
+n02112706 brussels griffon,animal,domestic_animal,dog,griffon
+n02113023 Pembroke Welsh Corgi,animal,domestic_animal,dog,corgi
+n02113186 Cardigan Welsh Corgi,animal,domestic_animal,dog,corgi
+n02113624 Toy Poodle,animal,domestic_animal,dog,poodle
+n02113712 Miniature Poodle,animal,domestic_animal,dog,poodle
+n02113799 Standard Poodle,animal,domestic_animal,dog,poodle
+n02113978 Mexican hairless dog (xoloitzcuintli),organism,animal,domestic_animal,dog
+n02114367 grey wolf,placental,carnivore,canine,wolf
+n02114548 Alaskan tundra wolf,placental,carnivore,canine,wolf
+n02114712 red wolf or maned wolf,placental,carnivore,canine,wolf
+n02114855 coyote,placental,carnivore,canine,wolf
+n02115641 dingo,placental,carnivore,canine,wild_dog
+n02115913 dhole,placental,carnivore,canine,wild_dog
+n02116738 African wild dog,placental,carnivore,canine,wild_dog
+n02117135 hyena,mammal,placental,carnivore,canine
+n02119022 red fox,placental,carnivore,canine,fox
+n02119789 kit fox,placental,carnivore,canine,fox
+n02120079 Arctic fox,placental,carnivore,canine,fox
+n02120505 grey fox,placental,carnivore,canine,fox
+n02123045 tabby cat,organism,animal,domestic_animal,cat,domestic_cat
+n02123159 tiger cat,organism,animal,domestic_animal,cat,domestic_cat
+n02123394 Persian cat,organism,animal,domestic_animal,cat,domestic_cat
+n02123597 Siamese cat,organism,animal,domestic_animal,cat,domestic_cat
+n02124075 Egyptian Mau,organism,animal,domestic_animal,cat,domestic_cat
+n02125311 cougar,carnivore,feline,cat,wildcat
+n02127052 lynx,carnivore,feline,cat,wildcat
+n02128385 leopard,placental,carnivore,feline,big_cat
+n02128757 snow leopard,placental,carnivore,feline,big_cat
+n02128925 jaguar,placental,carnivore,feline,big_cat
+n02129165 lion,placental,carnivore,feline,big_cat
+n02129604 tiger,placental,carnivore,feline,big_cat
+n02130308 cheetah,placental,carnivore,feline,big_cat
+n02132136 brown bear,mammal,placental,carnivore,bear
+n02133161 American black bear,mammal,placental,carnivore,bear
+n02134084 polar bear,mammal,placental,carnivore,bear
+n02134418 sloth bear,mammal,placental,carnivore,bear
+n02137549 mongoose,mammal,placental,carnivore,viverrine
+n02138441 meerkat,mammal,placental,carnivore,viverrine
+n02165105 tiger beetle,invertebrate,arthropod,insect,beetle
+n02165456 ladybug,invertebrate,arthropod,insect,beetle
+n02167151 ground beetle,invertebrate,arthropod,insect,beetle
+n02168699 longhorn beetle,invertebrate,arthropod,insect,beetle
+n02169497 leaf beetle,invertebrate,arthropod,insect,beetle
+n02172182 dung beetle,insect,beetle,lamellicorn_beetle,scarabaeid_beetle
+n02174001 rhinoceros beetle,insect,beetle,lamellicorn_beetle,scarabaeid_beetle
+n02177972 weevil,invertebrate,arthropod,insect,beetle
+n02190166 fly,invertebrate,arthropod,insect,dipterous_insect
+n02206856 bee,invertebrate,arthropod,insect,hymenopterous_insect
+n02219486 ant,invertebrate,arthropod,insect,hymenopterous_insect
+n02226429 grasshopper,invertebrate,arthropod,insect,orthopterous_insect
+n02229544 cricket insect,invertebrate,arthropod,insect,orthopterous_insect
+n02231487 stick insect,invertebrate,arthropod,insect,phasmid
+n02233338 cockroach,invertebrate,arthropod,insect,dictyopterous_insect
+n02236044 praying mantis,invertebrate,arthropod,insect,dictyopterous_insect
+n02256656 cicada,invertebrate,arthropod,insect,homopterous_insect
+n02259212 leafhopper,invertebrate,arthropod,insect,homopterous_insect
+n02264363 lacewing,invertebrate,arthropod,insect,neuropteron
+n02268443 dragonfly,invertebrate,arthropod,insect,odonate
+n02268853 damselfly,invertebrate,arthropod,insect,odonate
+n02276258 red admiral butterfly,insect,lepidopterous_insect,butterfly,nymphalid
+n02277742 ringlet butterfly,arthropod,insect,lepidopterous_insect,butterfly
+n02279972 monarch butterfly,insect,lepidopterous_insect,butterfly,danaid
+n02280649 small white butterfly,insect,lepidopterous_insect,butterfly,pierid
+n02281406 sulphur butterfly,arthropod,insect,lepidopterous_insect,butterfly
+n02281787 gossamer-winged butterfly,arthropod,insect,lepidopterous_insect,butterfly
+n02317335 starfish,organism,animal,invertebrate,echinoderm
+n02319095 sea urchin,organism,animal,invertebrate,echinoderm
+n02321529 sea cucumber,organism,animal,invertebrate,echinoderm
+n02325366 cottontail rabbit,placental,lagomorph,leporid,rabbit
+n02326432 hare,mammal,placental,lagomorph,leporid
+n02328150 Angora rabbit,placental,lagomorph,leporid,rabbit
+n02342885 hamster,vertebrate,mammal,placental,rodent
+n02346627 porcupine,vertebrate,mammal,placental,rodent
+n02356798 fox squirrel,placental,rodent,squirrel,tree_squirrel
+n02361337 marmot,vertebrate,mammal,placental,rodent
+n02363005 beaver,vertebrate,mammal,placental,rodent
+n02364673 guinea pig,mammal,placental,rodent,cavy
+n02389026 common sorrel horse,ungulate,odd-toed_ungulate,equine,horse
+n02391049 zebra,placental,ungulate,odd-toed_ungulate,equine
+n02395406 pig,placental,ungulate,even-toed_ungulate,swine
+n02396427 wild boar,placental,ungulate,even-toed_ungulate,swine
+n02397096 warthog,placental,ungulate,even-toed_ungulate,swine
+n02398521 hippopotamus,mammal,placental,ungulate,even-toed_ungulate
+n02403003 ox,ruminant,bovid,bovine,cattle
+n02408429 water buffalo,even-toed_ungulate,ruminant,bovid,old_world_buffalo
+n02410509 bison,ungulate,even-toed_ungulate,ruminant,bovid
+n02412080 ram (adult male sheep),even-toed_ungulate,ruminant,bovid,sheep
+n02415577 bighorn sheep,ruminant,bovid,wild_sheep,mountain_sheep
+n02417914 Alpine ibex,ruminant,bovid,goat,wild_goat
+n02422106 hartebeest,even-toed_ungulate,ruminant,bovid,antelope
+n02422699 impala (antelope),even-toed_ungulate,ruminant,bovid,antelope
+n02423022 gazelle,even-toed_ungulate,ruminant,bovid,antelope
+n02437312 arabian camel,placental,ungulate,even-toed_ungulate,camel
+n02437616 llama,mammal,placental,ungulate,even-toed_ungulate
+n02441942 weasel,mammal,placental,carnivore,musteline_mammal
+n02442845 mink,mammal,placental,carnivore,musteline_mammal
+n02443114 European polecat,mammal,placental,carnivore,musteline_mammal
+n02443484 black-footed ferret,mammal,placental,carnivore,musteline_mammal
+n02444819 otter,mammal,placental,carnivore,musteline_mammal
+n02445715 skunk,mammal,placental,carnivore,musteline_mammal
+n02447366 badger,mammal,placental,carnivore,musteline_mammal
+n02454379 armadillo,vertebrate,mammal,placental,edentate
+n02457408 three-toed sloth,mammal,placental,edentate,sloth
+n02480495 orangutan,primate,ape,anthropoid_ape,great_ape
+n02480855 gorilla,primate,ape,anthropoid_ape,great_ape
+n02481823 chimpanzee,primate,ape,anthropoid_ape,great_ape
+n02483362 gibbon,primate,ape,anthropoid_ape,lesser_ape
+n02483708 siamang,primate,ape,anthropoid_ape,lesser_ape
+n02484975 guenon,placental,primate,monkey,old_world_monkey
+n02486261 patas monkey,placental,primate,monkey,old_world_monkey
+n02486410 baboon,placental,primate,monkey,old_world_monkey
+n02487347 macaque,placental,primate,monkey,old_world_monkey
+n02488291 langur,placental,primate,monkey,old_world_monkey
+n02488702 black-and-white colobus,placental,primate,monkey,old_world_monkey
+n02489166 proboscis monkey,placental,primate,monkey,old_world_monkey
+n02490219 marmoset,placental,primate,monkey,new_world_monkey
+n02492035 white-headed capuchin,placental,primate,monkey,new_world_monkey
+n02492660 howler monkey,placental,primate,monkey,new_world_monkey
+n02493509 titi monkey,placental,primate,monkey,new_world_monkey
+n02493793 Geoffroy's spider monkey,placental,primate,monkey,new_world_monkey
+n02494079 common squirrel monkey,placental,primate,monkey,new_world_monkey
+n02497673 ring-tailed lemur,mammal,placental,primate,lemur
+n02500267 indri,mammal,placental,primate,lemur
+n02504013 Asian elephant,mammal,placental,pachyderm,elephant
+n02504458 African bush elephant,mammal,placental,pachyderm,elephant
+n02509815 red panda,mammal,placental,carnivore,procyonid
+n02510455 giant panda,mammal,placental,carnivore,procyonid
+n02514041 snoek fish,vertebrate,aquatic_vertebrate,fish,food_fish
+n02526121 eel,fish,bony_fish,teleost_fish,soft-finned_fish
+n02536864 silver salmon,fish,teleost_fish,soft-finned_fish,salmonid,salmon
+n02606052 rock beauty fish,fish,teleost_fish,spiny-finned_fish,percoid_fish,butterfly_fish
+n02607072 clownfish,fish,teleost_fish,spiny-finned_fish,percoid_fish,damselfish
+n02640242 sturgeon,fish,bony_fish,teleost_fish,ganoid
+n02641379 gar fish,fish,bony_fish,teleost_fish,ganoid
+n02643566 lionfish,fish,teleost_fish,spiny-finned_fish,scorpaenoid,scorpaenid
+n02655020 pufferfish,fish,bony_fish,teleost_fish,spiny-finned_fish,plectognath
+n02666196 abacus,instrumentality,device,machine,calculator
+n02667093 abaya,consumer_goods,clothing,garment,robe
+n02669723 academic gown,consumer_goods,clothing,outerwear,gown
+n02672831 accordion,device,musical_instrument,wind_instrument,free-reed_instrument
+n02676566 acoustic guitar,device,musical_instrument,stringed_instrument,guitar
+n02687172 aircraft carrier,craft,vessel,ship,warship
+n02690373 airliner,craft,aircraft,heavier-than-air_craft,airplane
+n02692877 airship,vehicle,craft,aircraft,lighter-than-air_craft
+n02699494 altar,object,whole,artifact,structure
+n02701002 ambulance,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n02704792 amphibious vehicle,container,wheeled_vehicle,self-propelled_vehicle,motor_vehicle
+n02708093 analog clock,instrument,measuring_instrument,timepiece,clock
+n02727426 apiary,structure,building,outbuilding,shed
+n02730930 apron,commodity,consumer_goods,clothing,protective_garment
+n02747177 trash can,artifact,instrumentality,container,bin
+n02749479 assault rifle,autoloader,automatic_firearm,machine_gun,automatic_rifle
+n02769748 backpack,artifact,instrumentality,container,bag
+n02776631 bakery,location,point,geographic_point,workplace
+n02777292 balance beam,instrumentality,equipment,sports_equipment,gymnastic_apparatus
+n02782093 balloon,vehicle,craft,aircraft,lighter-than-air_craft
+n02783161 ballpoint pen,instrumentality,implement,writing_implement,pen
+n02786058 Band-Aid,cloth_covering,dressing,bandage,adhesive_bandage
+n02787622 banjo,instrumentality,device,musical_instrument,stringed_instrument
+n02788148 baluster / handrail,artifact,structure,obstruction,barrier
+n02790996 barbell,instrumentality,equipment,sports_equipment,weight
+n02791124 barber chair,furnishing,furniture,seat,chair
+n02791270 barbershop,establishment,place_of_business,mercantile_establishment,shop
+n02793495 barn,artifact,structure,building,farm_building
+n02794156 barometer,instrumentality,device,instrument,measuring_instrument
+n02795169 barrel,artifact,instrumentality,container,vessel
+n02797295 wheelbarrow,instrumentality,container,wheeled_vehicle,handcart
+n02799071 baseball,instrumentality,equipment,sports_equipment,baseball_equipment
+n02802426 basketball,instrumentality,equipment,sports_equipment,basketball_equipment
+n02804414 bassinet,instrumentality,furnishing,furniture,baby_bed
+n02804610 bassoon,wind_instrument,woodwind,beating-reed_instrument,double-reed_instrument
+n02807133 swimming cap,consumer_goods,clothing,headdress,cap
+n02808304 bath towel,drygoods,white_goods,linen,bath_linen
+n02808440 bathtub,artifact,instrumentality,container,vessel
+n02814533 station wagon,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n02814860 lighthouse,whole,artifact,structure,tower
+n02815834 beaker,instrumentality,container,vessel,jar
+n02817516 military hat (bearskin or shako),consumer_goods,clothing,headdress,hat
+n02823428 beer bottle,instrumentality,container,vessel,bottle
+n02823750 beer glass,artifact,instrumentality,container,glass
+n02825657 bell tower,artifact,covering,protective_covering,shelter
+n02834397 baby bib,whole,artifact,fabric,piece_of_cloth
+n02835271 tandem bicycle,instrumentality,container,wheeled_vehicle,bicycle
+n02837789 bikini,consumer_goods,clothing,garment,swimsuit
+n02840245 ring binder,whole,artifact,covering,protective_covering
+n02841315 binoculars,instrumentality,device,instrument,optical_instrument
+n02843684 birdhouse,artifact,covering,protective_covering,shelter
+n02859443 boathouse,structure,building,outbuilding,shed
+n02860847 bobsleigh,instrumentality,conveyance,vehicle,sled
+n02865351 bolo tie,clothing,garment,neckwear,necktie
+n02869837 poke bonnet,consumer_goods,clothing,headdress,hat
+n02870880 bookcase,artifact,instrumentality,furnishing,furniture
+n02871525 bookstore,establishment,place_of_business,mercantile_establishment,shop
+n02877765 bottle cap,artifact,covering,top,cap
+n02879718 hunting bow,instrumentality,device,instrument,weapon
+n02883205 bow tie,clothing,garment,neckwear,necktie
+n02892201 brass memorial plaque,whole,artifact,structure,memorial
+n02892767 bra,commodity,consumer_goods,clothing,woman's_clothing
+n02894605 breakwater,artifact,structure,obstruction,barrier
+n02895154 breastplate,protective_covering,shield,plate,armor_plate
+n02906734 broom,artifact,instrumentality,implement,cleaning_implement
+n02909870 bucket,artifact,instrumentality,container,vessel
+n02910353 buckle,instrumentality,device,restraint,fastener
+n02916936 bulletproof vest,consumer_goods,clothing,garment,vest
+n02917067 high-speed train,conveyance,public_transport,train,passenger_train
+n02927161 butcher shop,establishment,place_of_business,mercantile_establishment,shop
+n02930766 taxicab,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n02939185 cauldron,utensil,kitchen_utensil,cooking_utensil,pot
+n02948072 candle,instrumentality,device,source_of_illumination,lamp
+n02950826 cannon,device,instrument,weapon,gun
+n02951358 canoe,craft,vessel,boat,small_boat
+n02951585 can opener,implement,tool,hand_tool,opener
+n02963159 cardigan,consumer_goods,clothing,garment,sweater
+n02965783 car mirror,instrumentality,device,reflector,mirror
+n02966193 carousel,device,mechanism,mechanical_device,ride
+n02966687 tool kit,instrumentality,equipment,gear,kit
+n02971356 cardboard box / carton,artifact,instrumentality,container,box
+n02974003 car wheel,mechanism,mechanical_device,machine,wheel
+n02977058 automated teller machine,artifact,instrumentality,device,machine
+n02978881 cassette,whole,artifact,instrumentality,container
+n02979186 cassette player,artifact,instrumentality,equipment,electronic_equipment
+n02980441 castle,artifact,structure,defensive_structure,fortification
+n02981792 catamaran,craft,vessel,sailing_vessel,sailboat
+n02988304 CD player,artifact,instrumentality,equipment,electronic_equipment
+n02992211 cello,device,musical_instrument,stringed_instrument,bowed_stringed_instrument
+n02992529 mobile phone,equipment,electronic_equipment,telephone,radiotelephone
+n02999410 chain,instrumentality,connection,attachment,ligament
+n03000134 chain-link fence,structure,obstruction,barrier,fence
+n03000247 chain mail,covering,protective_covering,armor,body_armor
+n03000684 chainsaw,device,machine,power_tool,power_saw
+n03014705 storage chest,artifact,instrumentality,container,box
+n03016953 chiffonier,instrumentality,furnishing,furniture,chest_of_drawers
+n03017168 bell or wind chime,instrumentality,device,musical_instrument,percussion_instrument
+n03018349 china cabinet,instrumentality,furnishing,furniture,cabinet
+n03026506 Christmas stocking,clothing,footwear,hosiery,stocking
+n03028079 church,artifact,structure,building,place_of_worship
+n03032252 movie theater,artifact,structure,building,theater
+n03041632 cleaver,cutting_implement,cutter,edge_tool,knife
+n03042490 cliff dwelling,artifact,structure,housing,dwelling
+n03045698 cloak,object,whole,artifact,covering
+n03047690 clogs,whole,artifact,covering,footwear
+n03062245 cocktail shaker,artifact,instrumentality,container,shaker
+n03063599 coffee mug,container,vessel,drinking_vessel,mug
+n03063689 coffeemaker,utensil,kitchen_utensil,cooking_utensil,pot
+n03065424 spiral or coil,object,whole,artifact,structure
+n03075370 combination lock,device,restraint,fastener,lock
+n03085013 computer keyboard,equipment,electronic_equipment,peripheral,data_input_device
+n03089624 candy store,establishment,place_of_business,mercantile_establishment,shop
+n03095699 container ship,craft,vessel,ship,cargo_ship
+n03100240 convertible,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n03109150 corkscrew,tool,hand_tool,opener,bottle_opener
+n03110669 cornet,device,musical_instrument,wind_instrument,brass
+n03124043 cowboy boot,artifact,covering,footwear,boot
+n03124170 cowboy hat,consumer_goods,clothing,headdress,hat
+n03125729 cradle,instrumentality,furnishing,furniture,baby_bed
+n03126707 construction crane,artifact,instrumentality,device,lifting_device
+n03127747 crash helmet,consumer_goods,clothing,headdress,helmet
+n03127925 crate,artifact,instrumentality,container,box
+n03131574 infant bed,instrumentality,furnishing,furniture,baby_bed
+n03133878 Crock Pot,utensil,kitchen_utensil,cooking_utensil,cooker
+n03134739 croquet ball,instrumentality,equipment,sports_equipment,croquet_equipment
+n03141823 crutch,instrumentality,implement,stick,staff
+n03146219 cuirass,covering,protective_covering,armor,body_armor
+n03160309 dam,artifact,structure,obstruction,barrier
+n03179701 desk,instrumentality,furnishing,furniture,table
+n03180011 desktop computer,machine,computer,digital_computer,personal_computer
+n03187595 rotary dial telephone,instrumentality,equipment,electronic_equipment,telephone
+n03188531 diaper,commodity,consumer_goods,clothing,garment
+n03196217 digital clock,instrument,measuring_instrument,timepiece,clock
+n03197337 digital watch,instrument,measuring_instrument,timepiece,watch
+n03201208 dining table,instrumentality,furnishing,furniture,table
+n03207743 dishcloth,whole,artifact,fabric,piece_of_cloth
+n03207941 dishwasher,durables,appliance,home_appliance,white_goods
+n03208938 disc brake,restraint,brake,brake_system,hydraulic_brake
+n03216828 dock,whole,artifact,structure,landing
+n03218198 dog sled,instrumentality,conveyance,vehicle,sled
+n03220513 dome,artifact,covering,protective_covering,roof
+n03223299 doormat,artifact,covering,floor_cover,mat
+n03240683 drilling rig,equipment,gear,rig,drill_rig
+n03249569 drum,instrumentality,device,musical_instrument,percussion_instrument
+n03250847 drumstick,artifact,instrumentality,implement,stick
+n03255030 dumbbell,instrumentality,equipment,sports_equipment,weight
+n03259280 Dutch oven,appliance,home_appliance,kitchen_appliance,oven
+n03271574 electric fan,artifact,instrumentality,device,fan
+n03272010 electric guitar,device,musical_instrument,stringed_instrument,guitar
+n03272562 electric locomotive,container,wheeled_vehicle,self-propelled_vehicle,locomotive
+n03290653 entertainment center,instrumentality,furnishing,furniture,wall_unit
+n03291819 envelope,whole,artifact,instrumentality,container
+n03297495 espresso machine,appliance,home_appliance,kitchen_appliance,coffee_maker
+n03314780 face powder,agent,drug,medicine,powder
+n03325584 feather boa,consumer_goods,clothing,garment,scarf
+n03337140 filing cabinet,instrumentality,furnishing,furniture,office_furniture
+n03344393 fireboat,vehicle,craft,vessel,boat
+n03345487 fire truck,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,truck
+n03347037 fire screen,artifact,covering,protective_covering,screen
+n03355925 flagpole,instrumentality,implement,stick,staff
+n03372029 flute,device,musical_instrument,wind_instrument,woodwind
+n03376595 folding chair,furnishing,furniture,seat,chair
+n03379051 football helmet,consumer_goods,clothing,headdress,helmet
+n03384352 forklift,instrumentality,container,wheeled_vehicle,self-propelled_vehicle
+n03388043 fountain,object,whole,artifact,structure
+n03388183 fountain pen,instrumentality,implement,writing_implement,pen
+n03388549 four-poster bed,furnishing,furniture,bedroom_furniture,bed
+n03393912 freight car,instrumentality,container,wheeled_vehicle,car
+n03394916 French horn,device,musical_instrument,wind_instrument,brass
+n03400231 frying pan,utensil,kitchen_utensil,cooking_utensil,pan
+n03404251 fur coat,clothing,garment,overgarment,coat
+n03417042 garbage truck,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,truck
+n03424325 gas mask or respirator,artifact,covering,protective_covering,mask
+n03425413 gas pump,device,mechanism,mechanical_device,pump
+n03443371 goblet,artifact,instrumentality,container,glass
+n03444034 go-kart,container,wheeled_vehicle,self-propelled_vehicle,motor_vehicle
+n03445777 golf ball,instrumentality,equipment,sports_equipment,golf_equipment
+n03445924 golf cart,container,wheeled_vehicle,self-propelled_vehicle,motor_vehicle
+n03447447 gondola,vehicle,craft,vessel,boat
+n03447721 gong,instrumentality,device,musical_instrument,percussion_instrument
+n03450230 gown,consumer_goods,clothing,woman's_clothing,dress
+n03452741 grand piano,device,musical_instrument,percussion_instrument,piano
+n03457902 greenhouse,whole,artifact,structure,building
+n03459775 radiator grille,structure,obstruction,barrier,grate
+n03461385 grocery store,establishment,place_of_business,mercantile_establishment,marketplace
+n03467068 guillotine,instrumentality,device,instrument,instrument_of_execution
+n03476684 hair clip,device,restraint,fastener,clip
+n03476991 hair spray,whole,artifact,instrumentality,toiletry
+n03478589 half-track,instrumentality,conveyance,vehicle,military_vehicle
+n03481172 hammer,instrumentality,implement,tool,hand_tool
+n03482405 hamper,artifact,instrumentality,container,basket
+n03483316 hair dryer,artifact,instrumentality,device,blower
+n03485407 hand-held computer,computer,digital_computer,personal_computer,portable_computer
+n03485794 handkerchief,whole,artifact,fabric,piece_of_cloth
+n03492542 hard disk drive,instrumentality,device,memory_device,magnetic_disk
+n03494278 harmonica,device,musical_instrument,wind_instrument,free-reed_instrument
+n03495258 harp,device,musical_instrument,stringed_instrument,chordophone
+n03496892 combine harvester,instrumentality,device,machine,farm_machine
+n03498962 hatchet,cutting_implement,cutter,edge_tool,ax
+n03527444 holster,artifact,covering,protective_covering,sheath
+n03529860 home theater,artifact,structure,building,theater
+n03530642 honeycomb,artifact,structure,supporting_structure,framework
+n03532672 hook,instrumentality,device,mechanism,mechanical_device
+n03534580 hoop skirt,consumer_goods,clothing,garment,skirt
+n03535780 gymnastic horizontal bar,instrumentality,equipment,sports_equipment,gymnastic_apparatus
+n03538406 horse-drawn vehicle,container,wheeled_vehicle,wagon,cart
+n03544143 hourglass,instrument,measuring_instrument,timepiece,sandglass
+n03584254 iPod,system,audio_system,reproducer,stereo
+n03584829 clothes iron,consumer_goods,durables,appliance,home_appliance
+n03590841 carved pumpkin,device,source_of_illumination,lamp,lantern
+n03594734 jeans,consumer_goods,clothing,garment,trouser
+n03594945 jeep,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n03595614 T-shirt,consumer_goods,clothing,garment,shirt
+n03598930 jigsaw puzzle,equipment,game_equipment,game,puzzle
+n03599486 rickshaw,container,wheeled_vehicle,wagon,cart
+n03602883 joystick,instrumentality,device,mechanism,control
+n03617480 kimono,consumer_goods,clothing,garment,robe
+n03623198 knee pad,commodity,consumer_goods,clothing,protective_garment
+n03627232 knot,instrumentality,device,restraint,fastener
+n03630383 lab coat,clothing,garment,overgarment,coat
+n03633091 ladle,artifact,instrumentality,container,vessel
+n03637318 lampshade,artifact,covering,protective_covering,shade
+n03642806 laptop computer,computer,digital_computer,personal_computer,portable_computer
+n03649909 lawn mower,instrumentality,implement,tool,garden_tool
+n03657121 lens cap,artifact,covering,protective_covering,cap
+n03658185 letter opener,cutting_implement,cutter,edge_tool,knife
+n03661043 library,whole,artifact,structure,building
+n03662601 lifeboat,craft,vessel,boat,sea_boat
+n03666591 lighter,whole,artifact,instrumentality,device
+n03670208 limousine,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n03673027 ocean liner,craft,vessel,ship,passenger_ship
+n03676483 lipstick,instrumentality,toiletry,cosmetic,makeup
+n03680355 slip-on shoe,artifact,covering,footwear,shoe
+n03690938 lotion,whole,artifact,instrumentality,toiletry
+n03691459 music speaker,device,electrical_device,transducer,electro-acoustic_transducer
+n03692522 loupe magnifying glass,magnifier,microscope,light_microscope,hand_glass
+n03697007 sawmill,structure,building_complex,plant,factory
+n03706229 magnetic compass,device,instrument,navigational_instrument,compass
+n03709823 messenger bag,artifact,instrumentality,container,bag
+n03710193 mailbox,artifact,instrumentality,container,box
+n03710637 tights,clothing,footwear,hosiery,tights
+n03710721 one-piece bathing suit,consumer_goods,clothing,garment,swimsuit
+n03717622 manhole cover,whole,artifact,covering,top
+n03720891 maraca,instrumentality,device,musical_instrument,percussion_instrument
+n03721384 marimba,instrumentality,device,musical_instrument,percussion_instrument
+n03724870 mask,consumer_goods,clothing,attire,disguise
+n03729826 matchstick,artifact,instrumentality,implement,stick
+n03733131 maypole,support,structural_member,upright,post
+n03733281 maze,whole,artifact,instrumentality,system
+n03733805 measuring cup,artifact,instrumentality,container,measure
+n03742115 medicine cabinet,instrumentality,furnishing,furniture,cabinet
+n03743016 megalith,whole,artifact,structure,memorial
+n03759954 microphone,device,electrical_device,transducer,electro-acoustic_transducer
+n03761084 microwave oven,durables,appliance,home_appliance,kitchen_appliance
+n03763968 military uniform,commodity,consumer_goods,clothing,uniform
+n03764736 milk can,artifact,instrumentality,container,can
+n03769881 minibus,instrumentality,conveyance,public_transport,bus
+n03770439 miniskirt,consumer_goods,clothing,garment,skirt
+n03770679 minivan,motor_vehicle,truck,van,passenger_van
+n03773504 missile,instrumentality,device,instrument,weapon
+n03775071 mitten,consumer_goods,clothing,handwear,glove
+n03775546 mixing bowl,instrumentality,container,dish,bowl
+n03776460 mobile home,instrumentality,container,wheeled_vehicle,trailer
+n03777568 ford model t,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n03777754 modem,artifact,instrumentality,equipment,electronic_equipment
+n03781244 monastery,building,house,residence,religious_residence
+n03782006 monitor,artifact,instrumentality,equipment,electronic_equipment
+n03785016 moped,self-propelled_vehicle,motor_vehicle,motorcycle,minibike
+n03786901 mortar and pestle,artifact,instrumentality,container,vessel
+n03787032 graduation cap,consumer_goods,clothing,headdress,cap
+n03788195 mosque,artifact,structure,building,place_of_worship
+n03788365 mosquito net,artifact,covering,protective_covering,screen
+n03791053 vespa,artifact,instrumentality,container,wheeled_vehicle
+n03792782 mountain bike,instrumentality,container,wheeled_vehicle,bicycle
+n03792972 tent,artifact,structure,shelter,tent
+n03793489 computer mouse,artifact,instrumentality,device,electronic_device
+n03794056 mousetrap,artifact,instrumentality,device,trap
+n03796401 moving van,self-propelled_vehicle,motor_vehicle,truck,van
+n03803284 muzzle,artifact,instrumentality,device,restraint
+n03804744 metal nail,instrumentality,device,restraint,fastener
+n03814639 neck brace,instrumentality,device,strengthener,brace
+n03814906 necklace,artifact,decoration,adornment,jewelry
+n03825788 baby pacifier,artifact,covering,top,cap
+n03832673 notebook computer,computer,digital_computer,personal_computer,portable_computer
+n03837869 obelisk,whole,artifact,structure,column
+n03838899 oboe,wind_instrument,woodwind,beating-reed_instrument,double-reed_instrument
+n03840681 ocarina,instrumentality,device,musical_instrument,wind_instrument
+n03841143 odometer,device,instrument,measuring_instrument,meter
+n03843555 oil filter,artifact,instrumentality,device,filter
+n03854065 pipe organ,instrumentality,device,musical_instrument,wind_instrument
+n03857828 oscilloscope,artifact,instrumentality,equipment,electronic_equipment
+n03866082 overskirt,consumer_goods,clothing,garment,skirt
+n03868242 bullock cart,container,wheeled_vehicle,wagon,cart
+n03868863 oxygen mask,artifact,instrumentality,device,breathing_device
+n03871628 product packet / packaging,artifact,instrumentality,container,package
+n03873416 paddle,artifact,instrumentality,implement,oar
+n03874293 paddle wheel,mechanism,mechanical_device,machine,wheel
+n03874599 padlock,device,restraint,fastener,lock
+n03876231 paintbrush,artifact,instrumentality,implement,brush
+n03877472 pajamas,commodity,consumer_goods,clothing,nightwear
+n03877845 palace,structure,building,house,residence
+n03884397 pan flute,device,musical_instrument,wind_instrument,pipe
+n03887697 paper towel,artifact,fabric,piece_of_cloth,towel
+n03888257 parachute,artifact,instrumentality,equipment,rescue_equipment
+n03888605 parallel bars,instrumentality,equipment,sports_equipment,gymnastic_apparatus
+n03891251 park bench,furnishing,furniture,seat,bench
+n03891332 parking meter,instrument,measuring_instrument,timepiece,timer
+n03895866 railroad car,instrumentality,container,wheeled_vehicle,car
+n03899768 patio,whole,artifact,structure,area
+n03902125 payphone,instrumentality,equipment,electronic_equipment,telephone
+n03903868 pedestal,artifact,structure,supporting_structure,support
+n03908618 pencil case,artifact,instrumentality,container,box
+n03908714 pencil sharpener,artifact,instrumentality,implement,sharpener
+n03916031 perfume,whole,artifact,instrumentality,toiletry
+n03920288 Petri dish,artifact,instrumentality,container,dish
+n03924679 photocopier,instrumentality,equipment,apparatus,duplicator
+n03929660 plectrum,whole,artifact,instrumentality,device
+n03929855 Pickelhaube,shield,plate,armor_plate,helmet
+n03930313 picket fence,structure,obstruction,barrier,fence
+n03930630 pickup truck,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,truck
+n03933933 pier,artifact,instrumentality,device,support
+n03935335 piggy bank,artifact,instrumentality,container,savings_bank
+n03937543 pill bottle,instrumentality,container,vessel,bottle
+n03938244 pillow,whole,artifact,padding,cushion
+n03942813 ping-pong ball,instrumentality,equipment,game_equipment,ball
+n03944341 pinwheel,mechanism,mechanical_device,machine,wheel
+n03947888 pirate ship,vehicle,craft,vessel,ship
+n03950228 drink pitcher,artifact,instrumentality,container,vessel
+n03954731 block plane,instrumentality,implement,tool,hand_tool
+n03956157 planetarium,whole,artifact,structure,building
+n03958227 plastic bag,artifact,instrumentality,container,bag
+n03961711 plate rack,structure,supporting_structure,framework,rack
+n03967562 farm plow,artifact,instrumentality,implement,tool
+n03970156 plunger,instrumentality,implement,tool,hand_tool
+n03976467 Polaroid camera,instrumentality,equipment,photographic_equipment,camera
+n03976657 pole,artifact,instrumentality,implement,rod
+n03977966 police van,self-propelled_vehicle,motor_vehicle,truck,van
+n03980874 poncho,clothing,garment,overgarment,cloak
+n03982430 pool table,instrumentality,furnishing,furniture,table
+n03983396 soda bottle,instrumentality,container,vessel,bottle
+n03991062 plant pot,whole,artifact,instrumentality,container
+n03992509 potter's wheel,mechanism,mechanical_device,machine,wheel
+n03995372 power drill,instrumentality,device,machine,power_tool
+n03998194 prayer rug,artifact,covering,floor_cover,rug
+n04004767 printer,instrumentality,device,machine,printer
+n04005630 prison,establishment,institution,penal_institution,correctional_institution
+n04008634 missile,instrumentality,device,instrument,weapon
+n04009552 projector,instrumentality,device,instrument,optical_instrument
+n04019541 hockey puck,mechanism,rotating_mechanism,circle,disk
+n04023962 punching bag,instrumentality,equipment,game_equipment,ball
+n04026417 purse,artifact,instrumentality,container,bag
+n04033901 quill,instrumentality,implement,writing_implement,pen
+n04033995 quilt,artifact,covering,cloth_covering,bedclothes
+n04037443 race car,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n04039381 racket,artifact,instrumentality,implement,sports_implement
+n04040759 radiator,artifact,instrumentality,device,mechanism
+n04041544 radio,artifact,instrumentality,system,communication_system
+n04044716 radio telescope,scientific_instrument,magnifier,telescope,astronomical_telescope
+n04049303 rain barrel,vessel,tank,reservoir,cistern
+n04065272 recreational vehicle,instrumentality,container,wheeled_vehicle,self-propelled_vehicle
+n04067472 fishing casting reel,device,mechanism,mechanical_device,winder
+n04069434 reflex camera,instrumentality,equipment,photographic_equipment,camera
+n04070727 refrigerator,durables,appliance,home_appliance,white_goods
+n04074963 remote control,whole,artifact,instrumentality,device
+n04081281 restaurant,whole,artifact,structure,building
+n04086273 revolver,weapon,gun,firearm,pistol
+n04090263 rifle,instrument,weapon,gun,firearm
+n04099969 rocking chair,furnishing,furniture,seat,chair
+n04111531 rotisserie,appliance,home_appliance,kitchen_appliance,oven
+n04116512 eraser,artifact,instrumentality,implement,eraser
+n04118538 rugby ball,instrumentality,equipment,game_equipment,ball
+n04118776 ruler measuring stick,device,instrument,measuring_instrument,measuring_stick
+n04120489 sneaker,artifact,covering,footwear,shoe
+n04125021 safe,instrumentality,container,box,strongbox
+n04127249 safety pin,device,restraint,fastener,pin
+n04131690 salt shaker,artifact,instrumentality,container,shaker
+n04133789 sandal,artifact,covering,footwear,shoe
+n04136333 sarong,consumer_goods,clothing,garment,skirt
+n04141076 saxophone,wind_instrument,woodwind,beating-reed_instrument,single-reed_instrument
+n04141327 scabbard,artifact,covering,protective_covering,sheath
+n04141975 weighing scale,instrumentality,device,instrument,measuring_instrument
+n04146614 school bus,instrumentality,conveyance,public_transport,bus
+n04147183 schooner,vehicle,craft,vessel,sailing_vessel
+n04149813 scoreboard,whole,artifact,structure,signboard
+n04152593 CRT monitor,instrumentality,device,electronic_device,display
+n04153751 screw,instrumentality,device,restraint,fastener
+n04154565 screwdriver,instrumentality,implement,tool,hand_tool
+n04162706 seat belt,instrumentality,device,restraint,safety_belt
+n04179913 sewing machine,consumer_goods,durables,appliance,home_appliance
+n04192698 shield,artifact,covering,protective_covering,armor
+n04200800 shoe store,establishment,place_of_business,mercantile_establishment,shop
+n04201297 shoji screen / room divider,whole,artifact,covering,screen
+n04204238 shopping basket,artifact,instrumentality,container,basket
+n04204347 shopping cart,instrumentality,container,wheeled_vehicle,handcart
+n04208210 shovel,instrumentality,implement,tool,hand_tool
+n04209133 shower cap,consumer_goods,clothing,headdress,cap
+n04209239 shower curtain,covering,protective_covering,blind,curtain
+n04228054 ski,artifact,instrumentality,device,runner
+n04229816 balaclava ski mask,covering,protective_covering,mask,face_mask
+n04235860 sleeping bag,artifact,instrumentality,container,bag
+n04238763 slide rule,device,machine,computer,analog_computer
+n04239074 sliding door,obstruction,barrier,movable_barrier,door
+n04243546 slot machine,instrumentality,device,machine,slot_machine
+n04251144 snorkel,artifact,instrumentality,device,breathing_device
+n04252077 snowmobile,container,wheeled_vehicle,self-propelled_vehicle,tracked_vehicle
+n04252225 snowplow,container,wheeled_vehicle,self-propelled_vehicle,motor_vehicle
+n04254120 soap dispenser,artifact,instrumentality,container,dispenser
+n04254680 soccer ball,instrumentality,equipment,game_equipment,ball
+n04254777 sock,consumer_goods,clothing,footwear,hosiery
+n04258138 solar thermal collector,artifact,instrumentality,device,reflector
+n04259630 sombrero,consumer_goods,clothing,headdress,hat
+n04263257 soup bowl,instrumentality,container,dish,bowl
+n04264628 keyboard space bar,implement,bar,lever,key
+n04265275 space heater,artifact,instrumentality,device,heater
+n04266014 space shuttle,conveyance,vehicle,craft,spacecraft
+n04270147 spatula,utensil,kitchen_utensil,cooking_utensil,turner
+n04273569 motorboat,craft,vessel,boat,motorboat
+n04275548 spider web,instrumentality,device,trap,web
+n04277352 spindle,artifact,instrumentality,implement,stick
+n04285008 sports car,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,car
+n04286575 spotlight,instrumentality,device,source_of_illumination,lamp
+n04296562 stage,artifact,surface,horizontal_surface,platform
+n04310018 steam locomotive,container,wheeled_vehicle,self-propelled_vehicle,locomotive
+n04311004 through arch bridge,whole,artifact,structure,bridge
+n04311174 steel drum,instrumentality,device,musical_instrument,percussion_instrument
+n04317175 stethoscope,instrumentality,device,instrument,medical_instrument
+n04325704 scarf,consumer_goods,clothing,garment,scarf
+n04326547 stone wall,structure,obstruction,barrier,fence
+n04328186 stopwatch,instrument,measuring_instrument,timepiece,timer
+n04330267 stove,artifact,instrumentality,device,heater
+n04332243 strainer,artifact,instrumentality,device,filter
+n04335435 tram,instrumentality,container,wheeled_vehicle,self-propelled_vehicle
+n04336792 stretcher,artifact,instrumentality,conveyance,litter
+n04344873 couch,furniture,seat,sofa,convertible
+n04346328 stupa,structure,building,place_of_worship,shrine
+n04347754 submarine,vessel,ship,warship,submersible
+n04350905 suit,commodity,consumer_goods,clothing,garment
+n04355338 sundial,device,instrument,measuring_instrument,timepiece
+n04355933 sunglasses,device,optical_device,lens,converging_lens
+n04356056 sunglasses,device,instrument,optical_instrument,spectacles
+n04357314 sunscreen,artifact,instrumentality,toiletry,cream
+n04366367 suspension bridge,whole,artifact,structure,bridge
+n04367480 mop,artifact,instrumentality,implement,cleaning_implement
+n04370456 sweatshirt,clothing,garment,sweater,pullover
+n04371430 swim trunks / shorts,consumer_goods,clothing,garment,swimsuit
+n04371774 swing,instrumentality,device,mechanism,mechanical_device
+n04372370 electrical switch,instrumentality,device,mechanism,control
+n04376876 syringe,instrumentality,device,instrument,medical_instrument
+n04380533 table lamp,instrumentality,furnishing,furniture,lamp
+n04389033 tank,container,wheeled_vehicle,self-propelled_vehicle,armored_vehicle
+n04392985 tape player,artifact,instrumentality,equipment,electronic_equipment
+n04398044 teapot,utensil,kitchen_utensil,cooking_utensil,pot
+n04399382 teddy bear,object,whole,artifact,plaything
+n04404412 television,instrumentality,system,communication_system,telecommunication_system
+n04409515 tennis ball,instrumentality,equipment,game_equipment,ball
+n04417672 thatched roof,artifact,covering,protective_covering,roof
+n04418357 front curtain,covering,protective_covering,blind,curtain
+n04423845 thimble,whole,artifact,instrumentality,container
+n04428191 threshing machine,instrumentality,device,machine,farm_machine
+n04429376 throne,furniture,seat,chair,chair_of_state
+n04435653 tile roof,artifact,covering,protective_covering,roof
+n04442312 toaster,durables,appliance,home_appliance,kitchen_appliance
+n04443257 tobacco shop,establishment,place_of_business,mercantile_establishment,shop
+n04447861 toilet seat,instrumentality,furnishing,furniture,seat
+n04456115 torch,instrumentality,device,source_of_illumination,light
+n04458633 totem pole,whole,artifact,structure,column
+n04461696 tow truck,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,truck
+n04462240 toy store,establishment,place_of_business,mercantile_establishment,shop
+n04465501 tractor,instrumentality,container,wheeled_vehicle,self-propelled_vehicle
+n04467665 semi-trailer truck,wheeled_vehicle,self-propelled_vehicle,motor_vehicle,truck
+n04476259 tray,artifact,instrumentality,container,receptacle
+n04479046 trench coat,garment,overgarment,coat,raincoat
+n04482393 tricycle,artifact,instrumentality,container,wheeled_vehicle
+n04483307 trimaran,craft,vessel,sailing_vessel,sailboat
+n04485082 tripod,instrumentality,device,support,rack
+n04486054 triumphal arch,whole,artifact,structure,arch
+n04487081 trolleybus,instrumentality,conveyance,public_transport,bus
+n04487394 trombone,device,musical_instrument,wind_instrument,brass
+n04493381 hot tub,artifact,instrumentality,container,vessel
+n04501370 turnstile,obstruction,barrier,movable_barrier,gate
+n04505470 typewriter keyboard,artifact,instrumentality,device,keyboard
+n04507155 umbrella,covering,protective_covering,shelter,canopy
+n04509417 unicycle,artifact,instrumentality,container,wheeled_vehicle
+n04515003 upright piano,device,musical_instrument,percussion_instrument,piano
+n04517823 vacuum cleaner,consumer_goods,durables,appliance,home_appliance
+n04522168 vase,instrumentality,container,vessel,jar
+n04523525 vaulted or arched ceiling,artifact,covering,protective_covering,roof
+n04525038 velvet fabric,object,whole,artifact,fabric
+n04525305 vending machine,instrumentality,device,machine,slot_machine
+n04532106 vestment,consumer_goods,clothing,outerwear,gown
+n04532670 viaduct,whole,artifact,structure,bridge
+n04536866 violin,device,musical_instrument,stringed_instrument,bowed_stringed_instrument
+n04540053 volleyball,instrumentality,equipment,game_equipment,ball
+n04542943 waffle iron,durables,appliance,home_appliance,kitchen_appliance
+n04548280 wall clock,instrument,measuring_instrument,timepiece,clock
+n04548362 wallet,artifact,instrumentality,container,case
+n04550184 wardrobe,artifact,instrumentality,furnishing,furniture
+n04552348 military aircraft,vehicle,craft,aircraft,heavier-than-air_craft
+n04553703 sink,instrumentality,container,vessel,basin
+n04554684 washing machine,durables,appliance,home_appliance,white_goods
+n04557648 water bottle,instrumentality,container,vessel,bottle
+n04560804 water jug,container,vessel,bottle,jug
+n04562935 water tower,container,vessel,tank,reservoir
+n04579145 whiskey jug,container,vessel,bottle,jug
+n04579432 whistle,artifact,instrumentality,device,acoustic_device
+n04584207 hair wig,consumer_goods,clothing,attire,hairpiece
+n04589890 window screen,artifact,covering,protective_covering,screen
+n04590129 window shade,covering,protective_covering,blind,window_blind
+n04591157 Windsor tie,clothing,garment,neckwear,necktie
+n04591713 wine bottle,instrumentality,container,vessel,bottle
+n04592741 airplane wing,artifact,instrumentality,device,airfoil
+n04596742 wok,utensil,kitchen_utensil,cooking_utensil,pan
+n04597913 wooden spoon,ware,tableware,cutlery,spoon
+n04599235 wool,object,whole,artifact,fabric
+n04604644 split-rail fence,obstruction,barrier,fence,rail_fence
+n04606251 shipwreck,vehicle,craft,vessel,ship
+n04612504 sailboat,craft,vessel,boat,small_boat
+n04613696 yurt,artifact,structure,housing,dwelling
+n06359193 website,instrumentality,device,machine,computer
+n06596364 comic book,medium,print_media,press,magazine
+n06785654 crossword,equipment,game_equipment,game,puzzle
+n06794110 traffic or street sign,entity,abstraction,communication,sign
+n06874185 traffic light,communication,signal,visual_signal,light
+n07248320 dust jacket,artifact,covering,wrapping,jacket
+n07565083 menu,matter,substance,food,fare
+n07579787 plate,food,nutriment,course,entree
+n07583066 guacamole,ingredient,flavorer,condiment,dip
+n07584110 consomme,food,nutriment,dish,soup
+n07590611 hot pot,food,nutriment,dish,stew
+n07613480 trifle,nutriment,course,dessert,pudding
+n07614500 ice cream,nutriment,course,dessert,frozen_dessert
+n07615774 popsicle,nutriment,course,dessert,frozen_dessert
+n07684084 baguette,food,baked_goods,bread,loaf_of_bread
+n07693725 bagel,food,baked_goods,bread,bun
+n07695742 pretzel,food,baked_goods,bread,cracker
+n07697313 cheeseburger,dish,snack_food,sandwich,hamburger
+n07697537 hot dog,nutriment,dish,snack_food,sandwich
+n07711569 mashed potatoes,produce,vegetable,solanaceous_vegetable,potato
+n07714571 cabbage,produce,vegetable,cruciferous_vegetable,cabbage
+n07714990 broccoli,food,produce,vegetable,cruciferous_vegetable
+n07715103 cauliflower,food,produce,vegetable,cruciferous_vegetable
+n07716358 zucchini,produce,vegetable,squash,summer_squash
+n07716906 spaghetti squash,produce,vegetable,squash,summer_squash
+n07717410 acorn squash,produce,vegetable,squash,winter_squash
+n07717556 butternut squash,produce,vegetable,squash,winter_squash
+n07718472 cucumber,solid,food,produce,vegetable
+n07718747 artichoke,solid,food,produce,vegetable
+n07720875 bell pepper,vegetable,solanaceous_vegetable,pepper,sweet_pepper
+n07730033 cardoon,solid,food,produce,vegetable
+n07734744 mushroom,solid,food,produce,vegetable
+n07742313 Granny Smith apple,produce,edible_fruit,apple,eating_apple
+n07745940 strawberry,food,produce,edible_fruit,berry
+n07747607 orange,food,produce,edible_fruit,citrus
+n07749582 lemon,food,produce,edible_fruit,citrus
+n07753113 fig,solid,food,produce,edible_fruit
+n07753275 pineapple,solid,food,produce,edible_fruit
+n07753592 banana,solid,food,produce,edible_fruit
+n07754684 jackfruit,solid,food,produce,edible_fruit
+n07760859 cherimoya (custard apple),solid,food,produce,edible_fruit
+n07768694 pomegranate,solid,food,produce,edible_fruit
+n07802026 hay,substance,food,feed,fodder
+n07831146 carbonara,flavorer,condiment,sauce,spaghetti_sauce
+n07836838 chocolate syrup,ingredient,flavorer,condiment,sauce
+n07860988 dough,substance,food,foodstuff,concoction
+n07871810 meatloaf,substance,food,nutriment,dish
+n07873807 pizza,substance,food,nutriment,dish
+n07875152 pot pie,substance,food,nutriment,dish
+n07880968 burrito,substance,food,nutriment,dish
+n07892512 red wine,food,beverage,alcohol,wine
+n07920052 espresso,substance,food,beverage,coffee
+n07930864 tea cup,beverage,alcohol,mixed_drink,punch
+n07932039 eggnog,beverage,alcohol,mixed_drink,punch
+n09193705 mountain,object,geological_formation,natural_elevation,mountain
+n09229709 bubble,round_shape,sphere,ball,globule
+n09246464 cliff,entity,physical_entity,object,geological_formation
+n09256479 coral reef,geological_formation,natural_elevation,ridge,reef
+n09288635 geyser,physical_entity,object,geological_formation,spring
+n09332890 lakeshore,physical_entity,object,geological_formation,shore
+n09399592 promontory,physical_entity,object,geological_formation,natural_elevation
+n09421951 sandbar,geological_formation,natural_elevation,ridge,bar
+n09428293 beach,physical_entity,object,geological_formation,shore
+n09468604 valley,physical_entity,object,geological_formation,natural_depression
+n09472597 volcano,object,geological_formation,natural_elevation,mountain
+n09835506 baseball player,organism,person,contestant,player
+n10148035 bridegroom,person,peer,associate,participant
+n10565667 scuba diver,organism,person,explorer,diver
+n11879895 rapeseed,reproductive_structure,fruit,seed,oilseed
+n11939491 daisy,vascular_plant,spermatophyte,angiosperm,flower
+n12057211 yellow lady's slipper,angiosperm,flower,orchid,lady's_slipper
+n12144580 corn,fruit,seed,grain,kernel
+n12267677 acorn,plant_part,plant_organ,reproductive_structure,fruit
+n12620546 rose hip,plant_part,plant_organ,reproductive_structure,fruit
+n12768682 horse chestnut seed,plant_organ,reproductive_structure,fruit,seed
+n12985857 coral fungus,whole,living_thing,organism,fungus
+n12998815 agaric,living_thing,organism,fungus,basidiomycete
+n13037406 gyromitra,whole,living_thing,organism,fungus
+n13040303 stinkhorn mushroom,whole,living_thing,organism,fungus
+n13044778 earth star fungus,whole,living_thing,organism,fungus
+n13052670 hen of the woods mushroom,whole,living_thing,organism,fungus
+n13054560 bolete,whole,living_thing,organism,fungus
+n13133613 corn cob,plant_part,plant_organ,reproductive_structure,fruit
+n15075141 toilet paper,substance,material,paper,tissue
