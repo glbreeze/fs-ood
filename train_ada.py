@@ -76,15 +76,13 @@ def extend_cfg(cfg):
 
     
     cfg.TRAINER.ADAPTERS = CN()
-    cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT = False
-    cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT = False
+    cfg.TRAINER.ADAPTERS.PREC = "fp32"  # fp16, fp32, amp
     
     cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER = True
     cfg.TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER = True
     
     cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER = False
     cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER = False
-    cfg.TRAINER.ADAPTERS.PREC = "fp16"  # fp16, fp32, amp
     
     # Add configurations specific to the text adapter
     cfg.TRAINER.TEXT_ADAPTER = CN()
@@ -96,13 +94,7 @@ def extend_cfg(cfg):
     cfg.TRAINER.IMAGE_ADAPTER.REDUCTION = 4
     cfg.TRAINER.IMAGE_ADAPTER.RATIO = 0.2
 
-    cfg.TRAINER.LOCOOP = CN()
-    cfg.TRAINER.LOCOOP.N_CTX = 16   # number of context vectors
-    cfg.TRAINER.LOCOOP.CSC = False  # class-specific context
-    cfg.TRAINER.LOCOOP.CTX_INIT = ""  # initialization words
-    cfg.TRAINER.LOCOOP.CLASS_TOKEN_POSITION = "end"  # 'middle' or 'end' or 'front'
-
-    cfg.DATASET.SUBSAMPLE_CLASSES = "all"  # all, base or new
+    cfg.DATASET.SUBSAMPLE_CLASSES = "all"  # all, base or new    # ========= need to change!! 
     
     # if "two_crop" in cfg.INPUT.TRANSFORMS:
     #     cfg.INPUT.GLOBAL_RRCROP_SCALE = (0.2, 1.0)
@@ -169,16 +161,17 @@ def main(args):
     print_args(args, cfg)
     print("Collecting env info ...")
     print("** System info **\n{}\n".format(collect_env_info()))
-
-
-    os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
-    os.environ["WANDB_MODE"] = "online"  # "dryrun"
+    
+    wandb.login()
+    os.environ["WANDB_MODE"] = "online"
     os.environ["WANDB_CACHE_DIR"] = "/scratch/lg154/sseg/.cache/wandb"
     os.environ["WANDB_CONFIG_DIR"] = "/scratch/lg154/sseg/.config/wandb"
-    wandb.login(key='0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee')
-    wandb.init(project='fs_ood', name=cfg.OUTPUT_DIR)
-    wandb.config.update(cfg_to_dict(cfg))
+    run_name = cfg.OUTPUT_DIR if cfg.OUTPUT_DIR else "default_run"
+    wandb.init(project='fs_ood', name=run_name)
 
+    # os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
+
+    torch.cuda.empty_cache()
     trainer = build_trainer(cfg)
     
     if args.eval_only:
@@ -190,7 +183,9 @@ def main(args):
         trainer.load_model(args.text_adapter_dir, epoch=args.load_epoch, module_name='text_adapter')
     
     if not args.no_train:
-        trainer.train(args)
+        import pdb; pdb.set_trace()
+        trainer.eval_ood(args)
+        # trainer.train(args)
 
 
 if __name__ == "__main__":
@@ -236,11 +231,15 @@ if __name__ == "__main__":
     parser.add_argument('--temp_ct', default=0.07, type=float)
     parser.add_argument('--topk', type=int, default=200, help='topk for extracted OOD regions')
     
-    # augment for MCM and GL-MCM
+    # argment for MCM and GL-MCM
     parser.add_argument('--in_dataset', default='imagenet', type=str,
                         choices=['imagenet'], help='in-distribution dataset')
     parser.add_argument('-b', '--batch-size', default=128, type=int, help='mini-batch size')
     parser.add_argument('--T', type=float, default=1, help='temperature parameter')
-
+    
+    # argument for choosing negative labels 
+    parser.add_argument('--pct_low', default=0.2, type=float)
+    parser.add_argument('--pct', default=0.15, type=float)
+    parser.add_argument('--percentile', default=0.95, type=float)
     args = parser.parse_args()
     main(args)

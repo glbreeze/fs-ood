@@ -10,7 +10,7 @@ from scipy import stats
 from sklearn.manifold import TSNE
 
 import clip_w_local
-from utils.detection_util import get_and_print_results
+from utils.detection_util import get_and_print_results, get_feats
 from utils.plot_util import plot_distribution
 from utils.train_eval_util import set_val_loader, set_ood_loader_ImageNet
 
@@ -216,131 +216,6 @@ class TextEncoder(nn.Module):
 
         x = x[torch.arange(x.shape[0]), tokenized_prompts.argmax(dim=-1)] @ self.text_projection
         return x
-
-
-class PromptLearner(nn.Module):
-    def __init__(self, cfg, classnames, clip_model):
-        super().__init__()
-        n_cls = len(classnames)
-        n_ctx = cfg.TRAINER.LOCOOP.N_CTX
-        ctx_init = cfg.TRAINER.LOCOOP.CTX_INIT
-        dtype = clip_model.dtype
-        ctx_dim = clip_model.ln_final.weight.shape[0]
-        clip_imsize = clip_model.visual.input_resolution
-        cfg_imsize = cfg.INPUT.SIZE[0]
-        assert cfg_imsize == clip_imsize, f"cfg_imsize ({cfg_imsize}) must equal to clip_imsize ({clip_imsize})"
-
-        if ctx_init:
-            # use given words to initialize context vectors
-            ctx_init = ctx_init.replace("_", " ")
-            n_ctx = len(ctx_init.split(" "))
-            prompt = clip.tokenize(ctx_init)
-            with torch.no_grad():
-                embedding = clip_model.token_embedding(prompt).type(dtype)
-            ctx_vectors = embedding[0, 1 : 1 + n_ctx, :]
-            prompt_prefix = ctx_init
-
-        else:
-            # random initialization
-            if cfg.TRAINER.LOCOOP.CSC:
-                print("Initializing class-specific contexts")
-                ctx_vectors = torch.empty(n_cls, n_ctx, ctx_dim, dtype=dtype)
-            else:
-                print("Initializing a generic context")
-                ctx_vectors = torch.empty(n_ctx, ctx_dim, dtype=dtype)
-            nn.init.normal_(ctx_vectors, std=0.02)
-            prompt_prefix = " ".join(["X"] * n_ctx)
-
-        print(f'Initial context: "{prompt_prefix}"')
-        print(f"Number of context words (tokens): {n_ctx}")
-
-        self.ctx = nn.Parameter(ctx_vectors)  # to be optimized
-
-        classnames = [name.replace("_", " ") for name in classnames]
-        name_lens = [len(_tokenizer.encode(name)) for name in classnames]
-        prompts = [prompt_prefix + " " + name + "." for name in classnames]
-
-        tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])
-        with torch.no_grad():
-            embedding = clip_model.token_embedding(tokenized_prompts).type(dtype)
-
-        # These token vectors will be saved when in save_model(),
-        # but they should be ignored in load_model() as we want to use
-        # those computed using the current class names
-        self.register_buffer("token_prefix", embedding[:, :1, :])  # SOS
-        self.register_buffer("token_suffix", embedding[:, 1 + n_ctx :, :])  # CLS, EOS
-
-        self.n_cls = n_cls
-        self.n_ctx = n_ctx
-        self.tokenized_prompts = tokenized_prompts  # torch.Tensor
-        self.name_lens = name_lens
-        self.class_token_position = cfg.TRAINER.LOCOOP.CLASS_TOKEN_POSITION
-
-    def forward(self):
-        ctx = self.ctx
-        if ctx.dim() == 2:
-            ctx = ctx.unsqueeze(0).expand(self.n_cls, -1, -1)
-
-        prefix = self.token_prefix
-        suffix = self.token_suffix
-
-        if self.class_token_position == "end":
-            prompts = torch.cat(
-                [
-                    prefix,  # (n_cls, 1, dim)
-                    ctx,     # (n_cls, n_ctx, dim)
-                    suffix,  # (n_cls, *, dim)
-                ],
-                dim=1,
-            )
-
-        elif self.class_token_position == "middle":
-            half_n_ctx = self.n_ctx // 2
-            prompts = []
-            for i in range(self.n_cls):
-                name_len = self.name_lens[i]
-                prefix_i = prefix[i : i + 1, :, :]
-                class_i = suffix[i : i + 1, :name_len, :]
-                suffix_i = suffix[i : i + 1, name_len:, :]
-                ctx_i_half1 = ctx[i : i + 1, :half_n_ctx, :]
-                ctx_i_half2 = ctx[i : i + 1, half_n_ctx:, :]
-                prompt = torch.cat(
-                    [
-                        prefix_i,     # (1, 1, dim)
-                        ctx_i_half1,  # (1, n_ctx//2, dim)
-                        class_i,      # (1, name_len, dim)
-                        ctx_i_half2,  # (1, n_ctx//2, dim)
-                        suffix_i,     # (1, *, dim)
-                    ],
-                    dim=1,
-                )
-                prompts.append(prompt)
-            prompts = torch.cat(prompts, dim=0)
-
-        elif self.class_token_position == "front":
-            prompts = []
-            for i in range(self.n_cls):
-                name_len = self.name_lens[i]
-                prefix_i = prefix[i : i + 1, :, :]
-                class_i = suffix[i : i + 1, :name_len, :]
-                suffix_i = suffix[i : i + 1, name_len:, :]
-                ctx_i = ctx[i : i + 1, :, :]
-                prompt = torch.cat(
-                    [
-                        prefix_i,  # (1, 1, dim)
-                        class_i,   # (1, name_len, dim)
-                        ctx_i,     # (1, n_ctx, dim)
-                        suffix_i,  # (1, *, dim)
-                    ],
-                    dim=1,
-                )
-                prompts.append(prompt)
-            prompts = torch.cat(prompts, dim=0)
-
-        else:
-            raise ValueError
-
-        return prompts
     
 
 class Adapter(nn.Module):
@@ -372,24 +247,28 @@ class CustomCLIP(nn.Module):
         self.dtype = clip_model.dtype
         self.clip_token_embedding = clip_model.token_embedding
         
-        if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            self.prompt_learner = PromptLearner(cfg, classnames, clip_model)
-            self.tokenized_prompts = self.prompt_learner.tokenized_prompts
+        # ===== postive and negative text embeddings 
+        text_feat_file = f"datasets/text_features_{cfg.DATASET.NAME}_{cfg.DATASET.SUBSAMPLE_CLASSES}.pth"
+        if os.path.exists(text_feat_file):
+            print(f"Loading precomputed text features from {text_feat_file}")
+            self.text_features = torch.load(text_feat_file).type(clip_model.dtype)
         else:
-            temp = CUSTOM_TEMPLATES[self.cfg.DATASET.NAME]
-            prompts = [temp.format(c.replace('_', ' ')) for c in classnames]
-            tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])
-            
-            text_feat_file = f"text_features_{cfg.DATASET.NAME}_{cfg.DATASET.SUBSAMPLE_CLASSES}.pt"
-            if os.path.exists(text_feat_file):
-                print(f"Loading precomputed text features from {text_feat_file}")
-                self.text_features = torch.load(text_feat_file).type(clip_model.dtype)
-            else:
-                print(f"Computing and saving text features to {text_feat_file}")
-                with torch.no_grad():
-                    self.text_features = clip_model.encode_text(tokenized_prompts).type(clip_model.dtype)
-                    torch.save(self.text_features, text_feat_file)
+            print(f"Computing and saving text features to {text_feat_file}")
+            with torch.no_grad():
+                temp = CUSTOM_TEMPLATES[self.cfg.DATASET.NAME]
+                prompts = [temp.format(c.replace('_', ' ')) for c in classnames]
+                tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])
+                self.text_features = clip_model.encode_text(tokenized_prompts).type(clip_model.dtype)
+                self.text_features = self.text_features/self.text_features.norm(dim=-1, keepdim=True)
+                torch.save(self.text_features, text_feat_file)
+        self.classnames = classnames
+                
+        dump_dict = torch.load('datasets/imagenet_neg/neg_embedding.pth')
+        self.text_features_neg = dump_dict['neg_emb'].type(clip_model.dtype)
+        self.classnames_neg = dump_dict['neg_name']
+        print('Load computed negative labels from :datasets/imagenet_neg/neg_embedding.pth')
         
+        # ===== init text and image adapter
         if cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER:
             self.text_adapter = Adapter(clip_model, reduction=cfg.TRAINER.TEXT_ADAPTER.REDUCTION, ratio=cfg.TRAINER.TEXT_ADAPTER.RATIO)
         else:
@@ -406,16 +285,12 @@ class CustomCLIP(nn.Module):
         
         if self.cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER and (not use_ori_clip):
             image_features = self.image_adapter(image_features)
-            
+        
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
         local_image_features = local_image_features / local_image_features.norm(dim=-1, keepdim=True)
 
         # ===== get text features =====
-        if self.cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            embeddings = self.prompt_learner()
-            text_features = self.text_encoder(embeddings, self.tokenized_prompts)
-        else:
-            text_features = self.text_features.to(image.device)
+        text_features = self.text_features.to(image.device)
             
         if self.cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER and (not use_ori_clip):
             text_features = self.text_adapter(text_features)
@@ -427,7 +302,59 @@ class CustomCLIP(nn.Module):
         logits_local = logit_scale * local_image_features @ text_features.T
 
         return logits, logits_local, image_features, local_image_features
+    
+    def refine_negative_samples(self, args, proto_filter=True):
+        with torch.no_grad():
+            
+            neg_sims = []
+            max_sims = []
+            emb_batchsize=1000
+            for i in range(0, len(self.text_features_neg), emb_batchsize):
+                tmp = self.text_features_neg[i: i + emb_batchsize] @ self.text_features.T
+                tmp = tmp.to(torch.float32)
+                
+                max_sim, _ = tmp.max(dim=-1)
+                max_sims.append(max_sim)
+                
+                sim = torch.quantile(tmp, q=args.percentile, dim=-1)
+                neg_sims.append(sim)
+            neg_sims = torch.cat(neg_sims, dim=0)
+            max_sims = torch.cat(max_sims, dim=0)
 
+            pct_low = torch.quantile(neg_sims, q=args.pct_low)
+            pct_high = torch.quantile(neg_sims, q=args.pct_low + args.pct)
+            
+            # Filter negatives: Keep only those within similarity thresholds
+            valid_indices = (max_sims <= 0.95) & (neg_sims >= pct_low) & (neg_sims <= pct_high)
+            valid_indices = torch.nonzero(valid_indices, as_tuple=True)[0].to(self.text_features_neg.device)
+            self.text_features_neg = self.text_features_neg[valid_indices]
+            self.selected_words = [self.classnames_neg[i] for i in valid_indices.tolist()]
+            
+            # Filter negatives: Keep only those which are not similar to prototypes
+            if proto_filter:
+                sim_proto = self.prototypes @ torch.cat([self.text_features, self.text_features_neg], dim=0).T
+                _, id_max = torch.max(sim_proto, dim=-1)
+                mask = id_max >= len(self.text_features)
+                indices_to_drop = set((id_max[mask] - len(self.text_features)).tolist())
+                indices_to_keep = torch.tensor([i for i in range(len(self.text_features_neg)) if i not in indices_to_drop], device=id_max.device)
+                self.text_features_neg = self.text_features_neg[indices_to_keep]
+                self.selected_words = [self.selected_words[i] for i in indices_to_keep.tolist()]
+
+            # Save filtered embeddings and words
+            torch.save({'neg_emb': self.text_features_neg.cpu(), 'neg_name': self.selected_words},
+                    os.path.join('datasets/imagenet_neg', f'neg_embedding_l{args.pct_low}p{args.pct}.pth'))
+
+            # Save selected negative words
+            with open(os.path.join('datasets/imagenet_neg', f"selected_neg_l{args.pct_low}p{args.pct}.txt"), "w") as f:
+                for item in self.selected_words:
+                    f.write("{}\n".format(item))
+                    
+    def to_device(self, device):
+        """Moves the model and related tensors to the specified device."""
+        self.to(device)
+        self.text_features = self.text_features.to(device)
+        self.text_features_neg = self.text_features_neg.to(device)
+            
 
 @TRAINER_REGISTRY.register()
 class AdaClip(TrainerX):
@@ -447,27 +374,18 @@ class AdaClip(TrainerX):
         clip_model = load_clip_to_cpu(cfg)
 
         if cfg.TRAINER.ADAPTERS.PREC == "fp32" or cfg.TRAINER.ADAPTERS.PREC == "amp":
-            clip_model.float()  # CLIP's default precision is fp16
+            clip_model = clip_model.float()  # CLIP's default precision is fp16
+        elif cfg.TRAINER.ADAPTERS.PREC == "fp16":
+            clip_model.half()
 
         print("Building custom CLIP")
         self.model = CustomCLIP(cfg, classnames, clip_model)
+        self.model.to_device(self.device)
 
         print("Turning off gradients in both the image and the text encoder")
         for name, param in self.model.named_parameters():
             if ("prompt_learner" not in name) and ("adapter" not in name):
                 param.requires_grad_(False)
-
-        if cfg.MODEL.INIT_WEIGHTS and cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            load_pretrained_weights(self.model.prompt_learner, cfg.MODEL.INIT_WEIGHTS)
-
-        self.model.to(self.device)
-        if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
-                self.optim = build_optimizer(self.model.prompt_learner, cfg.OPTIM)
-                self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
-                self.register_model("prompt_learner", self.model.prompt_learner, self.optim, self.sched)
-            else:
-                self.register_model("prompt_learner", self.model.prompt_learner)
                 
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
             if cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
@@ -509,22 +427,26 @@ class AdaClip(TrainerX):
                 with torch.no_grad():
                     _, _, feature, _ = self.model(global_crop.type(self.model.dtype))
 
-                all_features.append(feature)
+                all_features.append(feature/feature.norm(dim=-1, keepdim=True))
                 all_labels.append(label)
             
         # Concatenate all features and labels
         all_features = torch.cat(all_features, dim=0)
         all_labels = torch.cat(all_labels, dim=0)
+        
+        prototypes = torch.zeros(self.num_classes, all_features.shape[1], dtype=self.model.dtype, device=self.device)
+        covariances = torch.zeros(self.num_classes, all_features.shape[1], dtype=self.model.dtype, device=self.device)
 
-        prototypes = torch.zeros(self.num_classes, all_features.shape[1]).type(self.model.dtype).to(self.device)
         for class_idx in range(self.num_classes):
             class_mask = (all_labels == class_idx)
             class_features = all_features[class_mask]
-            
-            if class_features.size(0) > 0:  # Avoid division by zero in case of empty class
-                prototypes[class_idx] = class_features.mean(dim=0)  # Compute the mean feature vector
-        
+
+            if class_features.size(0) > 0:
+                prototypes[class_idx] = class_features.mean(dim=0)
+                covariances[class_idx] = class_features.var(dim=0, unbiased=False) + 1e-7
+
         self.model.prototypes = prototypes / prototypes.norm(dim=-1, keepdim=True)
+        self.model.class_covariances = covariances
 
     def forward_backward(self, batch):
         image, label = self.parse_batch_train(batch)
@@ -626,17 +548,23 @@ class AdaClip(TrainerX):
             checkpoint = load_checkpoint(model_path)
             state_dict = checkpoint["state_dict"]
             epoch = checkpoint["epoch"]
-
-            # Ignore fixed token vectors
-            if "token_prefix" in state_dict:
-                del state_dict["token_prefix"]
-
-            if "token_suffix" in state_dict:
-                del state_dict["token_suffix"]
-
             print("Loading weights to {} " 'from "{}" (epoch = {})'.format(name, model_path, epoch))
             # set strict=False
             self._models[name].load_state_dict(state_dict, strict=False)
+    
+    def train(self, args=None):
+        self.before_train()
+        
+        for self.epoch in range(self.start_epoch, self.max_epoch):
+    
+            self.before_epoch()
+            self.run_epoch()
+            self.after_epoch()
+            
+            if self.epoch==0 or (self.epoch + 1) % 10 == 0:
+                print(f"Running eval_ood at epoch {self.epoch + 1}")
+                self.eval_ood(args)
+        self.after_train()
 
     @torch.no_grad()
     def test(self, split=None):
@@ -671,41 +599,6 @@ class AdaClip(TrainerX):
         return list(results.values())[0]
 
     @torch.no_grad()
-    def test_ood(self, data_loader, T):
-        """Test-time OOD detection pipeline."""
-        to_np = lambda x: x.data.cpu().numpy()
-        concat = lambda x: np.concatenate(x, axis=0)
-
-        self.set_model_mode("eval")
-        self.evaluator.reset()
-
-        glmcm_score = []
-        mcm_score = []
-        im_score = []
-        
-        for batch_idx, (images, labels, *id_flag) in enumerate(data_loader):
-            images = images.cuda()
-            output, output_local, image_features, _ = self.model_inference(images)
-            
-            im_sim =  image_features @ self.model.prototypes.T
-            im_sim, _ = torch.max(im_sim, dim=-1)
-            im_score.append(-im_sim.cpu().numpy())
-            
-            output /= 100.0
-            output_local /= 100.0
-            
-            smax_global = to_np(F.softmax(output/T, dim=-1))
-            smax_local = to_np(F.softmax(output_local/T, dim=-1))
-            
-            mcm_global_score = -np.max(smax_global, axis=1)
-            mcm_local_score = -np.max(smax_local, axis=(1, 2))
-            
-            mcm_score.append(mcm_global_score)
-            glmcm_score.append(mcm_global_score+mcm_local_score)
-
-        return concat(mcm_score).copy(), concat(glmcm_score).copy(), concat(im_score).copy()
-
-    @torch.no_grad()
     def test_visualize(self, img_path, label):
         """code for visualization results"""
         self.set_model_mode("eval")
@@ -729,154 +622,112 @@ class AdaClip(TrainerX):
         contains_label = pred_topk.eq(torch.tensor(label_repeat).unsqueeze(1)).any(dim=1)
 
         return contains_label
-
-    @torch.no_grad()
-    def tsne_visualize(self, img_path, label):
-        """code for visualization results"""
-        self.set_model_mode("eval")
-        self.evaluator.reset()
-
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model, preprocess = clip.load("ViT-B/16", device=device)
-
-        image = preprocess(Image.open(img_path)).unsqueeze(0).to(device)
-        output, output_local = self.model_inference(image)
-
-        num_regions = output_local.shape[1]
-        label = torch.tensor(label).cuda()
-        label_repeat = label.repeat_interleave(num_regions)
-        output_local = F.softmax(output_local, dim=-1)
-
-        output_local = output_local.view(num_regions, -1)
-
-        # -----top 200--------
-        pred_topk = torch.topk(output_local, k=200, dim=1)[1]
-        contains_label = pred_topk.eq(torch.tensor(label_repeat).unsqueeze(1)).any(dim=1)
-
-        return contains_label
-    
-    def train(self, args=None):
-        """Generic training loops."""
-
-        self.before_train()
         
-        for self.epoch in range(self.start_epoch, self.max_epoch):
-    
-            self.before_epoch()
-            self.run_epoch()
-            self.after_epoch()
-            
-            if self.epoch==0 or (self.epoch + 1) % 10 == 0:
-                print(f"Running eval_ood at epoch {self.epoch + 1}")
-                self.eval_ood(args)
-        self.after_train()
-        
-    
     def eval_ood(self, args):
         self.set_model_mode("eval")
         self.compute_class_prototypes()
-        
-        if args.in_dataset in ['imagenet']:
-            out_datasets = ['iNaturalist', 'SUN', 'places365', 'Texture']
-    
+        torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth') # prototypes for ID
+        self.model.refine_negative_samples(args)
+
+        def get_id_score(data_loader, T = 0.01):
+            all_feats, all_labels = get_feats(data_loader, self.model)
+            maha = compute_mahalanobis_distance(all_feats, self.model.prototypes, self.model.class_covariances)
+            maha, idx = maha.min(dim=-1)
+            sim = all_feats @ torch.cat([self.model.text_features, self.model.text_features_neg], dim=0).T
+            id_scores = F.softmax(sim / T, dim=1)
+            id_score = id_scores[torch.arange(len(id_scores)), idx]
+            return maha, idx, sim, id_score
+
         _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
 
         id_data_loader = set_val_loader(args, preprocess)
-        in_score_mcm, in_score_gl, in_score_im = self.test_ood(id_data_loader, args.T)
-
-        auroc_list_mcm, aupr_list_mcm, fpr_list_mcm = [], [], []
-        auroc_list_gl, aupr_list_gl, fpr_list_gl = [], [], []
-        auroc_list_im, aupr_list_im, fpr_list_im = [], [], []
-
+        id_maha, id_idx, id_sim, id_score = get_id_score(id_data_loader)
+        torch.save({'id_maha': id_maha, 'id_idx': id_idx, 'id_sim': id_sim}, 'datasets/id_maha.pth')
+        
+        auroc_list, aupr_list, fpr_list = [], [], []
+        if args.in_dataset in ['imagenet']:
+            out_datasets = ['iNaturalist', 'SUN', 'places365', 'Texture']
         for idx, out_dataset in enumerate(out_datasets):
             print(f"Evaluting OOD dataset {out_dataset}")
             ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
-            out_score_mcm, out_score_gl, out_score_im = self.test_ood(ood_loader, args.T)
+            od_maha, od_idx, od_sim, od_score = get_id_score(ood_loader)
+            torch.save({'od_maha': od_maha, 'od_idx': od_idx, 'od_sim': od_sim}, f'datasets/od_maha_{out_dataset}.pth')
             print(f"====== ID score: {stats.describe(in_score_mcm)}, {out_dataset} OD score: {stats.describe(out_score_mcm)}")
-            print(f"====== ID score: {stats.describe(in_score_im)}, {out_dataset} OD score: {stats.describe(out_score_im)}")
-
-            print(">>>MCM score")
-            get_and_print_results(args, in_score_mcm, out_score_mcm, auroc_list_mcm, aupr_list_mcm, fpr_list_mcm)
             
-            print(">>>IMG score")
-            get_and_print_results(args, in_score_im, out_score_im, auroc_list_im, aupr_list_im, fpr_list_im)
+            get_and_print_results(-id_score, -od_score, auroc_list, aupr_list, fpr_list)
+            plot_distribution(args, -in_score, -out_score, out_dataset, score='new')
 
-            print("GL-MCM score")
-            get_and_print_results(args, in_score_gl, out_score_gl, auroc_list_gl, aupr_list_gl, fpr_list_gl)
-
-            if self.epoch == self.max_epoch - 1:
-                plot_distribution(args, in_score_mcm, out_score_mcm, out_dataset, score='MCM')
-                plot_distribution(args, in_score_gl, out_score_gl, out_dataset, score='GLMCM')
-
-        print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_mcm), np.mean(auroc_list_mcm), np.mean(aupr_list_mcm)))
-        print("MCM_IM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_im), np.mean(auroc_list_im), np.mean(aupr_list_im)))
-        print("GL-MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list_gl), np.mean(auroc_list_gl), np.mean(aupr_list_gl)))
-        if not hasattr(self, 'num_batches'):
-            self.num_batches = len(self.train_loader_x)
-        wandb.log({"mcm/fpr": np.mean(fpr_list_mcm),
-                   "mcm/auroc": np.mean(auroc_list_mcm), 
-                   "mcm/aupr": np.mean(aupr_list_mcm)
-                   }, step=(1 + self.epoch) * self.num_batches)
-        
-        wandb.log({"im/fpr": np.mean(fpr_list_im),
-                   "im/auroc": np.mean(auroc_list_im),
-                   "im/aupr": np.mean(aupr_list_im)
-                   }, step=(1 + self.epoch) * self.num_batches)
-
-        wandb.log({"gl-mcm/fpr": np.mean(fpr_list_gl),
-                   "gl-mcm/auroc": np.mean(auroc_list_gl), 
-                   "gl-mcm/aupr": np.mean(aupr_list_gl)
-                   }, step=(1 + self.epoch) * self.num_batches)
+        print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list), np.mean(auroc_list), np.mean(aupr_list)))
         
         
     def eval_ood1(self, args):
         self.set_model_mode("eval")
-        _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
+        self.compute_class_prototypes()
+        torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth') # prototypes for ID
+        self.model.refine_negative_samples(args)
         
-        num_classes = 50
-        out_dataset = 'iNaturalist'
-        id_loader = set_val_loader(args, preprocess, subset=True, num_classes=num_classes)
-        od_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
+         
+        dt = torch.load('datasets/id.pth')
+        id_feats, id_labels = dt['id_feats'], dt['id_labels']
+        dt = torch.load('datasets/od.pth')
+        od_feats, od_labels = dt['od_feats'], dt['od_labels']
+                    
+        # _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
+        # out_dataset = 'iNaturalist'
+        # id_loader = set_val_loader(args, preprocess)
+        # od_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
 
-        def get_feats(data_loader, T=1, datum=False):
-            mcm_scores = []
-            image_feats = []
-            all_labels = []
-            self.set_model_mode("eval")
-            self.evaluator.reset()
-            
-            with torch.no_grad():
-                for batch_idx, batch in enumerate(data_loader):
-                    if datum:
-                        images, labels = batch["img"], batch["label"]
-                    else:
-                        images, labels = batch
-                    
-                    if images.ndim == 5:
-                        labels = labels.repeat_interleave(images.shape[1]) 
-                        images = images.view(-1, images.shape[-3], images.shape[-2], images.shape[-1])  # Flatten the second dimension
-                        
-                    images = images.cuda()
-                    output, _, image_feature, _ = self.model_inference(images)
-                    
-                    output /= 100.0
-                    smax_global = F.softmax(output/T, dim=-1)
-                    max_values, _ = torch.max(smax_global, dim=1)
-                    mcm_global_score = -max_values
-                    
-                    mcm_scores.append(mcm_global_score.cpu())
-                    image_feats.append(image_feature.cpu())
-                    all_labels.append(labels)
-                    
-                    del images, output, image_feature, smax_global, max_values, mcm_global_score, labels
-                    torch.cuda.empty_cache()
-                
-            return torch.cat(mcm_scores, dim=0), torch.cat(image_feats, dim=0), torch.cat(all_labels, dim=0)
         
-        id_mcm, id_feats, id_labels = get_feats(id_loader)
-        od_mcm, od_feats, od_labels = get_feats(od_loader)
+        
+        # id_mcm, id_feats, id_labels = get_feats(id_loader)
+        # od_mcm, od_feats, od_labels = get_feats(od_loader)
+        
+        # ===== compute mahalanobis_dist =====       
+        id_maha = compute_mahalanobis_distance(id_feats, self.model.prototypes.cpu(), self.model.class_covariances.cpu())
+        id_maha, id_idx = id_maha.min(dim=-1)
+        id_sim = id_feats @ torch.cat([self.model.text_features, self.model.text_features_neg], dim=0).T.cpu()
+        torch.save({'id_maha': id_maha, 'id_idx': id_idx, 'id_sim': id_sim}, 'datasets/id_maha.pth')
+        
+        
+        od_maha = compute_mahalanobis_distance(od_feats, self.model.prototypes.cpu(), self.model.class_covariances.cpu())
+        od_maha, od_idx = od_maha.min(dim=-1) 
+        od_sim = od_feats @ torch.cat([self.model.text_features, self.model.text_features_neg], dim=0).T.cpu()
+        torch.save ({'od_maha': od_maha, 'od_idx': od_idx, 'od_sim': od_sim}, 'datasets/od_maha.pth')
+        
+        del id_feats, od_feats
+        id_mcm_tr, id_feats_tr, id_labels_tr = get_feats(self.train_loader_x, datum=True)
+        id_maha_tr = compute_mahalanobis_distance(id_feats_tr, self.model.prototypes.cpu(), self.model.class_covariances.cpu())
+        id_txt_score = id_feats_tr @ torch.cat([self.model.text_features, self.model.text_features_neg], dim=0).T.cpu()
+        torch.save({'id_maha_tr': id_maha_tr, 'id_txt_score': id_txt_score}, 'datasets/id_maha_tr.pt')
+        
+        # ======
+        
+        sim_od = self.model.prototypes.cpu() @ od_feats.T
+        sim_od_pt = torch.quantile(sim_od, q=0.95, dim=-1)
+        sim_od_max, _ = sim_od.max(dim=-1)
+        
+        sim_id = self.model.prototypes.cpu() @ id_feats.T
+        
+        num_classes = self.model.prototypes.shape[0]
+        sim_id_min = torch.full((num_classes,), float('inf'), device=sim_id.device)
+
+        for class_idx in range(num_classes):
+            class_mask = (id_labels == class_idx)
+            sim_id_min[class_idx] = sim_id[class_idx, class_mask].min()
+        
+        text_feats = torch.cat([self.model.text_features, self.model.text_features_neg], dim=0)
+        sim_txt = self.model.prototypes.cpu() @ text_feats.T
+        sim_txt_sfm = F.softmax(sim_txt/0.01, dim=-1)
+        
+        sim_txt_max, _ = torch.max(sim_txt_sfm[:, :1000], dim=-1)
+        sim_txt_max1, _ = torch.max(sim_txt_sfm[:, 1000:], dim=-1)
+        
+        # =====
+        
+        
         id_mcm_tr, id_feats_tr, id_labels_tr = get_feats(self.train_loader_x, datum=True)
         
+        num_classes = 1000
         class_prototypes = []
         for cls in range(num_classes):
             class_indices = (id_labels_tr == cls).nonzero(as_tuple=True)[0]
@@ -933,34 +784,18 @@ class AdaClip(TrainerX):
         plt.legend()
         
         plt.savefig('tsne_plot.png')
-        
-        id_sim = id_feats @ id_feats_tr.T
-        
-        od_sim = od_feats @ id_feats_tr.T
-            
-        
-        self.compute_class_prototypes()
-        
-        id_sim = id_feats @ self.model.prototypes.cpu().T
-        od_sim = od_feats @ self.model.prototypes.cpu().T
-        
-        id_sim_max, _ = torch.max(id_sim, dim=-1)
-        od_sim_max, _ = torch.max(od_sim, dim=-1)
-        
-        
-        stats.describe(id_mcm.cpu().numpy())
-        stats.describe(od_mcm.cpu().numpy())
-        
-        stats.describe(id_sim_max.cpu().numpy())
-        stats.describe(od_sim_max.cpu().numpy())
-        
-        tp = od_feats @ proto[950:1000].T
-        tp1, _ = torch.max(tp, dim=-1)
-        stats.describe(tp1.cpu().numpy())
-        
-        
-        
-        torch.save({'id_mcm_score': id_mcm, 'id_feats': id_feats}, 'id_features.pth')
-        torch.save({'od_mcm_score': od_mcm, 'od_feats': od_feats}, 'od_features.pth')
+
+
+def compute_mahalanobis_distance(feats, prototypes, class_covariances, batch_size=1024):
+    num_samples, feature_dim = feats.shape
+    num_classes = prototypes.shape[0]
+    mahalanobis_dist = torch.zeros((num_samples, num_classes), device=feats.device)
+    
+    # Process in batches to reduce memory usage
+    for i in range(0, num_samples, batch_size):
+        diff = feats[i:i + batch_size, None, :] - prototypes[None, :, :]  # Shape: (batch_size, num_classes, feature_dim)
+        mahalanobis_dist[i:i + batch_size] = (diff ** 2 / class_covariances[None, :, :]).sum(dim=-1).sqrt()
+
+    return mahalanobis_dist
         
         

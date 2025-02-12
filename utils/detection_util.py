@@ -93,7 +93,7 @@ def get_measures(_pos, _neg, recall_level=0.95):
     return auroc, aupr, fpr
 
 
-def get_and_print_results(args, in_score, out_score, auroc_list, aupr_list, fpr_list):
+def get_and_print_results(in_score, out_score, auroc_list, aupr_list, fpr_list):
     '''
     1) evaluate detection performance for a given OOD test set (loader)
     2) print results (FPR95, AUROC, AUPR)
@@ -106,3 +106,30 @@ def get_and_print_results(args, in_score, out_score, auroc_list, aupr_list, fpr_
     auroc = np.mean(aurocs); aupr = np.mean(auprs); fpr = np.mean(fprs)
     auroc_list.append(auroc); aupr_list.append(aupr); fpr_list.append(fpr)  # used to calculate the avg over multiple OOD test sets
     print("FPR:{}, AUROC:{}, AURPC:{}".format(fpr, auroc, aupr))
+
+
+def get_feats(data_loader, model, datum=False):
+    image_feats = []
+    all_labels = []
+    model.eval()
+    
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(data_loader):
+            if datum:
+                images, labels = batch["img"], batch["label"]
+            else:
+                images, labels = batch
+            
+            if images.ndim == 5:
+                labels = labels.repeat_interleave(images.shape[1]) 
+                images = images.view(-1, images.shape[-3], images.shape[-2], images.shape[-1])  # Flatten the second dimension
+                
+            output, _, image_feature, _ = model(images.cuda())
+            
+            image_feats.append(image_feature.cpu())
+            all_labels.append(labels)
+            
+            del images, output, image_feature, labels
+            torch.cuda.empty_cache()
+        
+    return torch.cat(image_feats, dim=0).cuda(), torch.cat(all_labels, dim=0).cuda()
