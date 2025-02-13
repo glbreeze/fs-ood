@@ -183,7 +183,7 @@ def main(args):
         trainer.load_model(args.text_adapter_dir, epoch=args.load_epoch, module_name='text_adapter')
     
     if not args.no_train:
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         trainer.eval_ood(args)
         # trainer.train(args)
 

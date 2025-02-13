@@ -7,7 +7,7 @@ python train.py \
         --dataset-config-file configs/datasets/imagenet.yaml \
         --config-file configs/trainers/LoCoOp/vit_b16_ep50.yaml \
         --output-dir output/imagenet/LoCoOp/vit_b16_ep50_16shots/nctx16_cscFalse_ctpend/test \
-        --lambda_value 0.25 \
+        --lambda_value 0 \
         --topk 200 \
         TRAINER.LOCOOP.N_CTX 16 \
         TRAINER.LOCOOP.CSC False \
@@ -48,6 +48,28 @@ python train_ada.py \
         TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER True \
         TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
         TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
+        INPUT.GLOBAL_RRCROP_SCALE "[0.08, 1.0]"
+
+
+# ==== Train AdaClip Text Prompt ====
+python train_ada.py \
+        --root /vast/lg154/datasets \
+        --seed 1 \
+        --trainer AdaClip \
+        --dataset-config-file configs/datasets/imagenet.yaml \
+        --config-file configs/trainers/LoCoOp/vit_b16_ep50.yaml \
+        --output-dir output/imagenet/adaclip/vit_b16_ep50_16shots/clip_im_ood_eval \
+        --topk 200 \
+        --load-epoch 50 \
+        --model-dir output/imagenet/LoCoOp/vit_b16_ep50_16shots/nctx16_cscFalse_ctpend/seed1 \
+        DATASET.NUM_SHOTS 16 \
+        INPUT.RRCROP_SCALE "(0.7, 1.0)" \
+        TRAINER.ADAPTERS.USE_TEXT_ADAPTER False \
+        TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER False \
+        TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
+        TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
+        INPUT.NUM_CROPS 1
+        
 
 # ====== train image adapter only
 python train_ada.py \
@@ -60,7 +82,7 @@ python train_ada.py \
         --topk 200 \
         --load-epoch 50 \
         --text-adapter-dir output/imagenet/adaclip/vit_b16_ada_16shots/text_adapter_ood \
-        TRAINER.ADAPTERS.USE_TEXT_ADAPTER False \
+        TRAINER.ADAPTERS.USE_TEXT_ADAPTER True \
         TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER False \
         TRAINER.ADAPTERS.USE_IMAGE_ADAPTER True \
         TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER True \
@@ -68,6 +90,8 @@ python train_ada.py \
 
 
 singularity exec --nv --overlay /scratch/lg154/python10/overlay-25GB-500K.ext3:ro --overlay /vast/work/public/ml-datasets/imagenet/imagenet-train.sqf:ro --overlay /vast/work/public/ml-datasets/imagenet/imagenet-val.sqf:ro /scratch/lg154/python10/cuda11.8.86-cudnn8.7-devel-ubuntu22.04.2.sif /bin/bash
+
+export SSL_CERT_FILE=/scratch/lg154/sseg/fs-ood/cacert.pem
 
 # ====== For locoop
 # train
@@ -147,5 +171,7 @@ python tsne_visualization.py \
 
 # ====== train adaclip ======
 sbatch scripts/train_ada.sh imagenet vit_b16_ada end 16 16 False 0.25 200
+
+sbatch scripts/train_ada2.sh imagenet vit_b16_ada 16
 
 sbatch scripts/train_ada_cpu.sh imagenet vit_b16_ada end 16 16 False 0.25 200

@@ -652,10 +652,11 @@ class AdaClip(TrainerX):
             ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
             od_maha, od_idx, od_sim, od_score = get_id_score(ood_loader)
             torch.save({'od_maha': od_maha, 'od_idx': od_idx, 'od_sim': od_sim}, f'datasets/od_maha_{out_dataset}.pth')
-            print(f"====== ID score: {stats.describe(in_score_mcm)}, {out_dataset} OD score: {stats.describe(out_score_mcm)}")
+            id_score, od_score = id_score.cpu().numpy(), od_score.cpu().numpy()
+            print(f"====== ID score: {stats.describe(id_score)}, {out_dataset} OD score: {stats.describe(od_score)}")
             
             get_and_print_results(-id_score, -od_score, auroc_list, aupr_list, fpr_list)
-            plot_distribution(args, -in_score, -out_score, out_dataset, score='new')
+            plot_distribution(args, -id_score, -od_score, out_dataset, score='new')
 
         print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list), np.mean(auroc_list), np.mean(aupr_list)))
         
