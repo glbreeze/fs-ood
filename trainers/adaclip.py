@@ -636,13 +636,13 @@ class AdaClip(TrainerX):
             sim = all_feats @ torch.cat([self.model.text_features, self.model.text_features_neg], dim=0).T
             id_scores = F.softmax(sim / T, dim=1)
             id_score = id_scores[torch.arange(len(id_scores)), idx]
-            return maha, idx, sim, id_score
+            return maha, idx, sim, id_score, all_labels
 
         _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
 
         id_data_loader = set_val_loader(args, preprocess)
-        id_maha, id_idx, id_sim, id_score = get_id_score(id_data_loader)
-        torch.save({'id_maha': id_maha, 'id_idx': id_idx, 'id_sim': id_sim}, 'datasets/id_maha.pth')
+        id_maha, id_idx, id_sim, id_score, id_labels = get_id_score(id_data_loader)
+        torch.save({'id_maha': id_maha, 'id_idx': id_idx, 'id_sim': id_sim, 'id_labels': id_labels}, 'datasets/id_maha.pth')
         id_score = id_score.cpu().numpy()
         
         auroc_list, aupr_list, fpr_list = [], [], []
@@ -651,7 +651,7 @@ class AdaClip(TrainerX):
         for idx, out_dataset in enumerate(out_datasets):
             print(f"Evaluting OOD dataset {out_dataset}")
             ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
-            od_maha, od_idx, od_sim, od_score = get_id_score(ood_loader)
+            od_maha, od_idx, od_sim, od_score, _ = get_id_score(ood_loader)
             torch.save({'od_maha': od_maha, 'od_idx': od_idx, 'od_sim': od_sim}, f'datasets/od_maha_{out_dataset}.pth')
             od_score = od_score.cpu().numpy()
             print(f"====== ID score: {stats.describe(id_score)}, {out_dataset} OD score: {stats.describe(od_score)}")
