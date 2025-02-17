@@ -354,7 +354,21 @@ class CustomCLIP(nn.Module):
         self.to(device)
         self.text_features = self.text_features.to(device)
         self.text_features_neg = self.text_features_neg.to(device)
-            
+
+
+def is_label_in_topk(logits, labels, k):
+    """
+    Check if the ground truth label is in the top-K labels.
+    Args:
+        logits (torch.Tensor): The logits tensor of shape (batch_size, num_classes).
+        labels (torch.Tensor): The ground truth labels tensor of shape (batch_size).
+        k (int): The number of top elements to select.
+    Returns:
+        torch.Tensor: A boolean tensor of shape (batch_size) indicating if the ground truth label is in the top-K labels.
+    """
+    _, topk_indices = torch.topk(logits, k, dim=1)
+    return torch.eq(topk_indices, labels.view(-1, 1)).any(dim=1)
+
 
 @TRAINER_REGISTRY.register()
 class AdaClip(TrainerX):
@@ -425,7 +439,16 @@ class AdaClip(TrainerX):
                     global_crop = image
 
                 with torch.no_grad():
-                    _, _, feature, _ = self.model(global_crop.type(self.model.dtype))
+                    logits, _, feature, _ = self.model(global_crop.type(self.model.dtype))
+                    probs = softmax(logits, dim=-1)
+                    keep_prob_mask = probs[torch.arange(probs.size(0)), label] > 0.1
+                    
+                    topk_check = is_label_in_topk(logits, label, self.top_k)
+
+                    keep_mask = keep_prob_mask & topk_check
+
+                    feature = feature[keep_mask]
+                    label = label[keep_mask]
 
                 all_features.append(feature/feature.norm(dim=-1, keepdim=True))
                 all_labels.append(label)
@@ -798,5 +821,5 @@ def compute_mahalanobis_distance(feats, prototypes, class_covariances, batch_siz
         mahalanobis_dist[i:i + batch_size] = (diff ** 2 / class_covariances[None, :, :]).sum(dim=-1).sqrt()
 
     return mahalanobis_dist
-        
-        
+
+
