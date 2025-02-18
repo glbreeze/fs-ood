@@ -441,7 +441,7 @@ class AdaClip(TrainerX):
                 with torch.no_grad():
                     logits, _, feature, _ = self.model(global_crop.type(self.model.dtype))
                     probs = softmax(logits, dim=-1)
-                    keep_prob_mask = probs[torch.arange(probs.size(0)), label] > 0.1
+                    keep_prob_mask = probs[torch.arange(probs.size(0)), label] > 0.05
                     
                     topk_check = is_label_in_topk(logits, label, self.top_k)
 
