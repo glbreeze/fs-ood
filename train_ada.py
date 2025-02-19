@@ -60,6 +60,9 @@ def reset_cfg(cfg, args):
     if args.topk:
         cfg.topk = args.topk
 
+    if args.topk_neg: 
+        cfg.topk_neg = args.topk_neg
+
 
 def extend_cfg(cfg):
     """
@@ -77,17 +80,22 @@ def extend_cfg(cfg):
     
     cfg.TRAINER.ADAPTERS = CN()
     cfg.TRAINER.ADAPTERS.PREC = "fp32"  # fp16, fp32, amp
-    
-    cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER = True
-    cfg.TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER = True
+    cfg.TRAINER.ADAPTERS.LAMBDA = 1.0
+    cfg.TRAINER.ADAPTERS.LAMBDA_NEG = 1.0
+ 
+    cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT = True
+    cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT = True
     
     cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER = False
     cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER = False
     
     # Add configurations specific to the text adapter
-    cfg.TRAINER.TEXT_ADAPTER = CN()
-    cfg.TRAINER.TEXT_ADAPTER.REDUCTION = 4
-    cfg.TRAINER.TEXT_ADAPTER.RATIO = 0.2
+    cfg.TRAINER.LOCOOP = CN()
+    cfg.TRAINER.LOCOOP.N_CTX = 16   # number of context vectors
+    cfg.TRAINER.LOCOOP.CSC = False  # class-specific context
+    cfg.TRAINER.LOCOOP.CTX_INIT = ""  # initialization words
+    cfg.TRAINER.LOCOOP.CLASS_TOKEN_POSITION = "end"  # 'middle' or 'end' or 'front'
+    cfg.TRAINER.LOCOOP.NEG = True
 
     # Add configurations specific to the image adapter
     cfg.TRAINER.IMAGE_ADAPTER = CN()
@@ -226,11 +234,8 @@ if __name__ == "__main__":
         help="modify config options using the command-line",
     )
     # augment for LoCoOp
-    parser.add_argument('--lambda_ct', type=float, default=1.0,help='weight for contrastive loss')
-    parser.add_argument('--lambda_dt', type=float, default=1.0,help='weight for distillation loss')
     parser.add_argument('--temp_ct', default=0.07, type=float)
-    parser.add_argument('--topk', type=int, default=200, help='topk for extracted OOD regions')
-    
+    parser.add_argument('--topk', type=int, default=10, help='topk')
     # argment for MCM and GL-MCM
     parser.add_argument('--in_dataset', default='imagenet', type=str,
                         choices=['imagenet'], help='in-distribution dataset')

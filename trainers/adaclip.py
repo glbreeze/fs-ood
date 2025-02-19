@@ -21,163 +21,11 @@ from dassl.optim import build_optimizer, build_lr_scheduler
 
 from clip_w_local import clip
 from clip_w_local.simple_tokenizer import SimpleTokenizer as _Tokenizer
+from .utils import SupConLoss, CUSTOM_TEMPLATES, entropy_select_topk, filter_positive_negative
+from .locoop import PromptLearner
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
-
-
-CUSTOM_TEMPLATES = {
-    'OxfordPets': 'a photo of a {}, a type of pet.',
-    'OxfordFlowers': 'a photo of a {}, a type of flower.',
-    'FGVCAircraft': 'a photo of a {}, a type of aircraft.',
-    'DescribableTextures': '{} texture.',
-    'EuroSAT': 'a centered satellite photo of {}.',
-    'StanfordCars': 'a photo of a {}.',
-    'Food101': 'a photo of {}, a type of food.',
-    'SUN397': 'a photo of a {}.',
-    'Caltech101': 'a photo of a {}.',
-    'UCF101': 'a photo of a person doing {}.',
-    'ImageNet': 'a photo of a {}.',
-    'ImageNetSketch': 'a photo of a {}.',
-    'ImageNetV2': 'a photo of a {}.',
-    'ImageNetA': 'a photo of a {}.',
-    'ImageNetR': 'a photo of a {}.'
-}
-
-
-def compute_contrastive_loss(output, label, temperature=0.07):
-    # Cosine similarity based contrastive loss (normalized embeddings)
-    sim_matrix = torch.matmul(output, output.T) / temperature
-    labels = label.view(-1, 1)
-    mask = torch.eq(labels, labels.T).float()  # 1 for positive pairs, 0 for negatives
-
-    # Compute contrastive loss
-    exp_sim = torch.exp(sim_matrix) * mask  # Keep positive pairs
-    sum_exp_sim = torch.sum(torch.exp(sim_matrix), dim=1, keepdim=True)  # All pairs
-
-    # Normalize the loss for each instance
-    loss = -torch.log(exp_sim / sum_exp_sim)
-    return loss.mean()
-
-
-class SupConLoss(nn.Module):
-    """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
-    It also supports the unsupervised contrastive loss in SimCLR"""
-    def __init__(self, temperature=0.07, contrast_mode='all', base_temperature=0.07):
-        super(SupConLoss, self).__init__()
-        self.temperature = temperature
-        self.contrast_mode = contrast_mode
-        self.base_temperature = base_temperature
-
-    def forward(self, features, labels=None):
-        """Compute loss for model. If both `labels` and `mask` are None, it degenerates to SimCLR unsupervised loss:
-        https://arxiv.org/pdf/2002.05709.pdf
-
-        Args:
-            features: hidden vector of shape [bsz, n_views, ...].
-            labels: ground truth of shape [bsz].
-        Returns:
-            A loss scalar.
-        """
-        device = (torch.device('cuda') if features.is_cuda else torch.device('cpu'))
-
-        if len(features.shape) < 3:
-            raise ValueError('`features` needs to be [bsz, n_views, ...], at least 3 dimensions are required')
-        if len(features.shape) > 3:
-            features = features.view(features.shape[0], features.shape[1], -1)
-
-        batch_size = features.shape[0]
-        if labels is None:
-            mask = torch.eye(batch_size, dtype=torch.float32).to(device)
-        elif labels is not None:
-            labels = labels.contiguous().view(-1, 1)
-            if labels.shape[0] != batch_size:
-                raise ValueError('Num of labels does not match num of features')
-            mask = torch.eq(labels, labels.T).float().to(device)
-
-        contrast_count = features.shape[1]
-        contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0)
-        if self.contrast_mode == 'one':
-            anchor_feature = features[:, 0]
-            anchor_count = 1
-        elif self.contrast_mode == 'all':
-            anchor_feature = contrast_feature
-            anchor_count = contrast_count
-        else:
-            raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
-
-        # compute logits
-        anchor_dot_contrast = torch.div(
-            torch.matmul(anchor_feature, contrast_feature.T),
-            self.temperature)
-        # for numerical stability
-        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
-        logits = anchor_dot_contrast - logits_max.detach()
-
-        # tile mask
-        mask = mask.repeat(anchor_count, contrast_count)
-        # mask-out self-contrast cases
-        logits_mask = torch.scatter(
-            torch.ones_like(mask),
-            1,
-            torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
-            0
-        )
-        mask = mask * logits_mask
-
-        # compute log_prob
-        exp_logits = torch.exp(logits) * logits_mask
-        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
-
-        # compute mean of log-likelihood over positive
-        # modified to handle edge cases when there is no positive pair
-        # for an anchor point.
-        # Edge case e.g.:-
-        # features of shape: [4,1,...]
-        # labels:            [0,1,1,2]
-        # loss before mean:  [nan, ..., ..., nan]
-        mask_pos_pairs = mask.sum(1)
-        mask_pos_pairs = torch.where(mask_pos_pairs < 1e-6, 1, mask_pos_pairs)
-        mean_log_prob_pos = (mask * log_prob).sum(1) / mask_pos_pairs
-
-        # loss
-        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
-        loss = loss.view(anchor_count, batch_size).mean()
-
-        return loss
-    
-
-_tokenizer = _Tokenizer()
-softmax = nn.Softmax(dim=1).cuda()
-
-
-def entropy_select_topk(p, top_k, label):
-    """
-    Extract non-Top-K regions and calculate entropy.
-    """
-    p = F.softmax(p, dim=-1)
-    pred_topk = torch.topk(p, k=top_k, dim=1)[1]
-    contains_label = pred_topk.eq(label.unsqueeze(1)).any(dim=1)
-    selected_p = p[~contains_label]
-
-    if selected_p.shape[0] == 0:
-        return torch.tensor([0]).cuda()
-    return -torch.mean(torch.sum(selected_p * torch.log(selected_p+1e-5), 1))
-
-
-def entropy_select_topk_crop(output_local, top_k, label):
-    """
-    Select OOD samples based on top-K entropy and thresholds.
-    """
-    # Compute entropy
-    p = F.softmax(output_local, dim=1)
-    pred_topk = torch.topk(p, k=top_k, dim=1)[1]
-    contains_label = pred_topk.eq(torch.tensor(label).unsqueeze(1)).any(dim=1)
-    selected_p = p[~contains_label]
-    
-    if selected_p.shape[0] == 0:
-        return torch.tensor([0]).cuda()
-    return -torch.mean(torch.sum(selected_p * torch.log(selected_p+1e-5), 1))
 
 
 def load_clip_to_cpu(cfg):
@@ -245,39 +93,46 @@ class CustomCLIP(nn.Module):
         self.text_encoder = TextEncoder(clip_model)
         self.logit_scale = clip_model.logit_scale
         self.dtype = clip_model.dtype
+        self.clip_model = clip_model
         self.clip_token_embedding = clip_model.token_embedding
+        self.classnames = classnames
         
         # ===== postive and negative text embeddings 
-        text_feat_file = f"datasets/text_features_{cfg.DATASET.NAME}_{cfg.DATASET.SUBSAMPLE_CLASSES}.pth"
+        dump_dict = torch.load('datasets/imagenet_neg/neg_embedding.pth')
+        self.text_features_neg = dump_dict['neg_emb'].type(clip_model.dtype)
+        self.classnames_neg = dump_dict['neg_name']
+        self.num_neg = len(self.classnames_neg)
+        print('Load computed negative labels from :datasets/imagenet_neg/neg_embedding.pth')
+
+        self.load_clip_text_features(classnames)
+
+        # ===== init text prompt learner =====
+        if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
+            self.init_text_prompt_learner(classnames)
+            
+        # ===== init image adapter =====
+        if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
+            self.image_adapter = Adapter(clip_model, reduction=cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, ratio=cfg.TRAINER.IMAGE_ADAPTER.RATIO)  # Assuming ImageAdapter is a class for the image adapter
+    
+    def init_text_prompt_learner(self, classnames):
+        self.prompt_learner = PromptLearner(self.cfg, self.clip_model, classnames=classnames)
+        self.tokenized_prompts = self.prompt_learner.tokenized_prompts
+    
+    def load_clip_text_features(self, classnames):
+        self.num_pos = len(classnames)
+        text_feat_file = f"datasets/text_features_{self.cfg.DATASET.NAME}_{self.cfg.DATASET.SUBSAMPLE_CLASSES}.pth"
         if os.path.exists(text_feat_file):
             print(f"Loading precomputed text features from {text_feat_file}")
-            self.text_features = torch.load(text_feat_file).type(clip_model.dtype)
+            self.text_features = torch.load(text_feat_file).type(self.clip_model.dtype)
         else:
             print(f"Computing and saving text features to {text_feat_file}")
             with torch.no_grad():
                 temp = CUSTOM_TEMPLATES[self.cfg.DATASET.NAME]
                 prompts = [temp.format(c.replace('_', ' ')) for c in classnames]
                 tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])
-                self.text_features = clip_model.encode_text(tokenized_prompts).type(clip_model.dtype)
+                self.text_features = self.clip_model.encode_text(tokenized_prompts).type(self.clip_model.dtype)
                 self.text_features = self.text_features/self.text_features.norm(dim=-1, keepdim=True)
                 torch.save(self.text_features, text_feat_file)
-        self.classnames = classnames
-                
-        dump_dict = torch.load('datasets/imagenet_neg/neg_embedding.pth')
-        self.text_features_neg = dump_dict['neg_emb'].type(clip_model.dtype)
-        self.classnames_neg = dump_dict['neg_name']
-        print('Load computed negative labels from :datasets/imagenet_neg/neg_embedding.pth')
-        
-        # ===== init text and image adapter
-        if cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER:
-            self.text_adapter = Adapter(clip_model, reduction=cfg.TRAINER.TEXT_ADAPTER.REDUCTION, ratio=cfg.TRAINER.TEXT_ADAPTER.RATIO)
-        else:
-            self.text_adapter = None
-        
-        if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
-            self.image_adapter = Adapter(clip_model, reduction=cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, ratio=cfg.TRAINER.IMAGE_ADAPTER.RATIO)  # Assuming ImageAdapter is a class for the image adapter
-        else:
-            self.image_adapter = None
 
     def forward(self, image, use_ori_clip=False):
         # ===== get image features =====
@@ -290,17 +145,18 @@ class CustomCLIP(nn.Module):
         local_image_features = local_image_features / local_image_features.norm(dim=-1, keepdim=True)
 
         # ===== get text features =====
-        text_features = self.text_features.to(image.device)
-            
-        if self.cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER and (not use_ori_clip):
-            text_features = self.text_adapter(text_features)
-            
+        if self.cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and (not use_ori_clip):
+            prompts = self.prompt_learner()
+            tokenized_prompts = self.tokenized_prompts
+            text_features = self.text_encoder(prompts, tokenized_prompts)
+        else:
+            text_features = torch.cat([self.text_features.to(image.device), self.text_features_neg.to(image.device)], dim=0)            
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
+        # ===== calculate logits =====
         logit_scale = self.logit_scale.exp()
         logits = logit_scale * image_features @ text_features.t()
         logits_local = logit_scale * local_image_features @ text_features.T
-
         return logits, logits_local, image_features, local_image_features
     
     def refine_negative_samples(self, args, proto_filter=True):
@@ -328,25 +184,26 @@ class CustomCLIP(nn.Module):
             valid_indices = (max_sims <= 0.95) & (neg_sims >= pct_low) & (neg_sims <= pct_high)
             valid_indices = torch.nonzero(valid_indices, as_tuple=True)[0].to(self.text_features_neg.device)
             self.text_features_neg = self.text_features_neg[valid_indices]
-            self.selected_words = [self.classnames_neg[i] for i in valid_indices.tolist()]
+            self.classnames_neg = [self.classnames_neg[i] for i in valid_indices.tolist()]
             
             # Filter negatives: Keep only those which are not similar to prototypes
-            if proto_filter:
+            if proto_filter and hasattr(self, "prototypes"):
                 sim_proto = self.prototypes @ torch.cat([self.text_features, self.text_features_neg], dim=0).T
                 _, id_max = torch.max(sim_proto, dim=-1)
                 mask = id_max >= len(self.text_features)
                 indices_to_drop = set((id_max[mask] - len(self.text_features)).tolist())
                 indices_to_keep = torch.tensor([i for i in range(len(self.text_features_neg)) if i not in indices_to_drop], device=id_max.device)
                 self.text_features_neg = self.text_features_neg[indices_to_keep]
-                self.selected_words = [self.selected_words[i] for i in indices_to_keep.tolist()]
+                self.classnames_neg = [self.classnames_neg[i] for i in indices_to_keep.tolist()]
 
-            # Save filtered embeddings and words
-            torch.save({'neg_emb': self.text_features_neg.cpu(), 'neg_name': self.selected_words},
+            self.num_neg = len(self.text_features_neg)
+            print(f"Number of negative samples after filtering: {self.num_neg}")
+            torch.save({'neg_emb': self.text_features_neg.cpu(), 'neg_name': self.classnames_neg},
                     os.path.join('datasets/imagenet_neg', f'neg_embedding_l{args.pct_low}p{args.pct}.pth'))
 
             # Save selected negative words
             with open(os.path.join('datasets/imagenet_neg', f"selected_neg_l{args.pct_low}p{args.pct}.txt"), "w") as f:
-                for item in self.selected_words:
+                for item in self.classnames_neg:
                     f.write("{}\n".format(item))
                     
     def to_device(self, device):
@@ -357,15 +214,6 @@ class CustomCLIP(nn.Module):
 
 
 def is_label_in_topk(logits, labels, k):
-    """
-    Check if the ground truth label is in the top-K labels.
-    Args:
-        logits (torch.Tensor): The logits tensor of shape (batch_size, num_classes).
-        labels (torch.Tensor): The ground truth labels tensor of shape (batch_size).
-        k (int): The number of top elements to select.
-    Returns:
-        torch.Tensor: A boolean tensor of shape (batch_size) indicating if the ground truth label is in the top-K labels.
-    """
     _, topk_indices = torch.topk(logits, k, dim=1)
     return torch.eq(topk_indices, labels.view(-1, 1)).any(dim=1)
 
@@ -381,8 +229,6 @@ class AdaClip(TrainerX):
     def build_model(self):
         cfg = self.cfg
         classnames = self.dm.dataset.classnames
-
-        self.top_k = cfg.topk
 
         print(f"Loading CLIP (backbone: {cfg.MODEL.BACKBONE.NAME})")
         clip_model = load_clip_to_cpu(cfg)
@@ -400,20 +246,20 @@ class AdaClip(TrainerX):
         for name, param in self.model.named_parameters():
             if ("prompt_learner" not in name) and ("adapter" not in name):
                 param.requires_grad_(False)
-                
+
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
             if cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
-                self.optim = build_optimizer(self.model.image_adapter, cfg.OPTIM)
-                self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
-                self.register_model("image_adapter", self.model.image_adapter, self.optim, self.sched)
+                self.optim_img = build_optimizer(self.model.image_adapter, cfg.OPTIM)
+                self.sched_img = build_lr_scheduler(self.optim_img, cfg.OPTIM)
+                self.register_model("image_adapter", self.model.image_adapter, self.optim_img, self.sched_img)
             else:
                 self.register_model("image_adapter", self.model.image_adapter)
                 
-        if cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER:
+        if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
             if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER:
-                self.optim = build_optimizer(self.model.text_adapter, cfg.OPTIM)
-                self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
-                self.register_model("text_adapter", self.model.text_adapter, self.optim, self.sched)
+                self.optim_txt = build_optimizer(self.model.text_adapter, cfg.OPTIM)
+                self.sched_txt = build_lr_scheduler(self.optim_txt, cfg.OPTIM)
+                self.register_model("text_adapter", self.model.text_adapter, self.optim_txt, self.sched_txt)
             else:
                 self.register_model("text_adapter", self.model.text_adapter)
 
@@ -440,10 +286,10 @@ class AdaClip(TrainerX):
 
                 with torch.no_grad():
                     logits, _, feature, _ = self.model(global_crop.type(self.model.dtype))
-                    probs = softmax(logits, dim=-1)
+                    probs = F.softmax(logits, dim=-1)
                     keep_prob_mask = probs[torch.arange(probs.size(0)), label] > 0.05
                     
-                    topk_check = is_label_in_topk(logits, label, self.top_k)
+                    topk_check = is_label_in_topk(logits, label, self.cfg.topk)
 
                     keep_mask = keep_prob_mask & topk_check
 
@@ -473,66 +319,55 @@ class AdaClip(TrainerX):
 
     def forward_backward(self, batch):
         image, label = self.parse_batch_train(batch)
+        if self.cfg.INPUT.NUM_CROPS > 1: 
+            label = torch.repeat_interleave(label, self.cfg.INPUT.NUM_CROPS)
 
-        prec = self.cfg.TRAINER.ADAPTERS.PREC
-
-        use_amp = prec == "amp"
+        use_amp = self.cfg.TRAINER.ADAPTERS.PREC == "amp"
         with autocast(enabled=use_amp):
-            if isinstance(image, tuple) or isinstance(image, list):  # Two-crop augmentation scenario
-                global_crop, local_crop = image
+            
+            with torch.no_grad():
+                output_fz, _, image_feats_fz, _ = self.model(image, use_ori_clip=True)
+                pos_img, pos_label, neg_img, neg_label = filter_positive_negative(output_fz, image, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=0.2)
+                
+            if pos_img.numel() > 0:
+                output_pos, _, image_feats_pos, _ = self.model(pos_img)
+                loss_pos = F.cross_entropy(output_pos, pos_label)
+                loss_pos_pt = 1 - F.cosine_similarity(image_feats_pos, self.model.prototypes[pos_label], dim=-1).mean()
+            else: 
+                loss_pos, loss_pos_pt = torch.tensor(0.0, device=image.device), torch.tensor(0.0, device=image.device)
+            if neg_img.numel() > 0:
+                output_neg, _, image_feats_neg, _ = self.model(neg_img)
+                prob_neg = F.softmax(output_neg, dim=-1)  # Shape: [B, K_pos + K_neg]
 
-                output, _, image_feats, _ = self.model(global_crop)
-                output_local, _, image_feats_local, _ = self.model(local_crop)
-
-                # Calculate loss (for global crop)
-                loss_id = F.cross_entropy(output, label)
-                
-                if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
-                    with torch.no_grad():
-                        output0, _, image_feats0, _ = self.model(global_crop, use_ori_clip=True)
-                        output_local0, _, image_feats_local0, _ = self.model(local_crop, use_ori_clip=True)
-                    # Contrastive loss 
-                    ConLoss = SupConLoss(temperature=self.cfg.temp_ct)
-                    loss_ct = ConLoss(torch.cat([image_feats.unsqueeze(1), image_feats_local.unsqueeze(1)], dim=1), labels=label)
-                    # Distillation Loss
-                    loss_dt = ( mse_loss(image_feats, image_feats0) + mse_loss(image_feats_local, image_feats_local0) ) * 10
-                else:
-                    loss_ct = torch.tensor(0.0, device=loss_id.device)
-                    loss_dt = torch.tensor(0.0, device=loss_id.device)
-                
-                loss = loss_id + self.cfg.lambda_ct * loss_ct + self.cfg.lambda_dt * loss_dt
-                # Calculate OOD regularization loss (for local crop)
-                # loss_en = -entropy_select_topk(output_local, self.top_k, label)
-                # loss = loss_id + self.lambda_value * loss_en
-                
+                loss_neg = (prob_neg[:, self.model.num_neg:].sum(dim=-1) / prob_neg.sum(dim=-1)).mean()
+                loss_neg_pt = F.cosine_similarity(image_feats_neg, self.model.prototypes[neg_label], dim=-1).mean()
             else:
-                output, output_local, _, _ = self.model(image)
-                
-                # calculate CoOp loss
-                loss_id = F.cross_entropy(output, label)
-                
-                # calculate OOD regularization loss
-                batch_size, num_of_local_feature = output_local.shape[0], output_local.shape[1]
-                output_local = output_local.view(batch_size * num_of_local_feature, -1)
-                loss_en = - entropy_select_topk(output_local, self.top_k, label.repeat_interleave(num_of_local_feature))
+                loss_neg, loss_neg_pt= torch.tensor(0.0, device=image.device), torch.tensor(0.0, device=image.device)
 
-                # calculate total loss for LoCoOp
-                loss = loss_id + self.lambda_value * loss_en
-        
+            loss = loss_pos + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_pos_pt + \
+                self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG * (loss_neg + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_neg_pt)
+         
         if use_amp:
-            self.optim.zero_grad()
+            for optim in self._optims.values():
+                optim.zero_grad()
             self.scaler.scale(loss).backward()
-            self.scaler.step(self.optim)
+            for optim in self._optims.values():
+                self.scaler.step(optim) 
             self.scaler.update()
         else:
-            self.model_backward_and_update(loss)
+            for optim in self._optims.values():
+                optim.zero_grad()
+            loss.backward()
+            for optim in self._optims.values():
+                optim.step()
 
         loss_summary = {
             "loss": loss.item(),
-            "loss_id": loss_id.item(),
-            "loss_ct": loss_ct.item(),
-            "loss_dt": loss_dt.item(),
-            "acc": compute_accuracy(output, label)[0].item(),
+            "loss_pos": loss_pos.item(),
+            "loss_pos_pt": loss_pos_pt.item(),
+            "loss_neg": loss_neg.item(),
+            "loss_neg_pt": loss_neg_pt.item(),
+            "acc": compute_accuracy(output_pos[:, :1000], label)[0].item(),
         }
 
         if (self.batch_idx + 1) == self.num_batches:
@@ -575,11 +410,17 @@ class AdaClip(TrainerX):
             # set strict=False
             self._models[name].load_state_dict(state_dict, strict=False)
     
+    def before_train(self, args):
+        self.compute_class_prototypes()
+        torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth')
+        self.model.refine_negative_samples(args)
+
+        if self.cfg.TRAINER.LOCOOP.NEG:
+            self.model.init_text_prompt_learner(self.model.classnames + self.model.classnames_neg)
+        
     def train(self, args=None):
         self.before_train()
-        
         for self.epoch in range(self.start_epoch, self.max_epoch):
-    
             self.before_epoch()
             self.run_epoch()
             self.after_epoch()

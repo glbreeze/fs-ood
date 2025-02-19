@@ -103,7 +103,7 @@ class TextEncoder(nn.Module):
 
 
 class PromptLearner(nn.Module):
-    def __init__(self, cfg, classnames, clip_model):
+    def __init__(self, cfg, clip_model, classnames):
         super().__init__()
         n_cls = len(classnames)
         n_ctx = cfg.TRAINER.LOCOOP.N_CTX
@@ -230,7 +230,7 @@ class PromptLearner(nn.Module):
 class CustomCLIP(nn.Module):
     def __init__(self, cfg, classnames, clip_model):
         super().__init__()
-        self.prompt_learner = PromptLearner(cfg, classnames, clip_model)
+        self.prompt_learner = PromptLearner(cfg, clip_model, classnames)
         self.tokenized_prompts = self.prompt_learner.tokenized_prompts
         self.image_encoder = clip_model.visual
         self.text_encoder = TextEncoder(clip_model)
