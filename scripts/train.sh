@@ -58,17 +58,17 @@ python train_ada.py \
         --trainer AdaClip \
         --dataset-config-file configs/datasets/imagenet.yaml \
         --config-file configs/trainers/LoCoOp/vit_b16_ep50.yaml \
-        --output-dir output/imagenet/adaclip/vit_b16_ep50_16shots/clip_im_ood_eval \
-        --topk 200 \
+        --output-dir output/imagenet/adaclip/vit_b16_ep50_16shots/ada_16shot_0.2 \
+        --topk 8 \
         --load-epoch 50 \
         --model-dir output/imagenet/LoCoOp/vit_b16_ep50_16shots/nctx16_cscFalse_ctpend/seed1 \
-        DATASET.NUM_SHOTS 16 \
-        INPUT.RRCROP_SCALE "(0.7, 1.0)" \
-        TRAINER.ADAPTERS.USE_TEXT_ADAPTER False \
-        TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER False \
-        TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
-        TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
-        INPUT.NUM_CROPS 1
+        DATASET.NUM_SHOTS 8 \
+        INPUT.RRCROP_SCALE "(0.2, 1.0)" \
+        TRAINER.ADAPTERS.USE_TEXT_PROMPT True \
+        TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT True \
+        TRAINER.ADAPTERS.USE_IMAGE_ADAPTER True \
+        TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER True \
+        INPUT.NUM_CROPS 10
         
 
 # ====== train image adapter only
@@ -78,8 +78,8 @@ python train_ada.py \
         --trainer AdaClip \
         --dataset-config-file configs/datasets/imagenet.yaml \
         --config-file configs/trainers/LoCoOp/vit_b16_ada.yaml \
-        --output-dir output/imagenet/adaclip/vit_b16_ep50_16shots/test \
-        --topk 200 \
+        --output-dir output/imagenet/adaclip/vit_b16_ep50_16shots/ \
+        --topk 8 \
         --load-epoch 50 \
         --text-adapter-dir output/imagenet/adaclip/vit_b16_ada_16shots/text_adapter_ood \
         TRAINER.ADAPTERS.USE_TEXT_ADAPTER True \

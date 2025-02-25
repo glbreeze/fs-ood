@@ -1,4 +1,6 @@
 import torch
+import torch.nn as nn
+from torch.nn import functional as F
 
 CUSTOM_TEMPLATES = {
     'OxfordPets': 'a photo of a {}, a type of pet.',
@@ -19,34 +21,36 @@ CUSTOM_TEMPLATES = {
 }
 
 
-def filter_positive_negative(
-    logits: torch.Tensor, images: torch.Tensor, labels: torch.Tensor, 
-    num_crops: int, top_k_percent: float = 0.2
-):
+def filter_positive_negative(logits, images, labels, num_crops, top_k_percent):
+    """images: [N, C, H, W]"""
     num_samples = logits.shape[0] // num_crops  # Compute number of original samples
 
     logits = logits.view(num_samples, num_crops, -1)  # [num_samples, num_crops, num_classes]
     labels = labels.view(num_samples, num_crops)      # [num_samples, num_crops]
     images = images.view(num_samples, num_crops, *images.shape[1:])  # [num_samples, num_crops, C, H, W]
 
-    # Get logits corresponding to ground truth labels
-    ground_truth_logits = logits.gather(dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)  # [num_samples, num_crops]
-
     # Sort the logits for each sample (descending order)
+    ground_truth_logits = logits.gather(dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)  # [num_samples, num_crops]
     sorted_logits, sorted_indices = torch.sort(ground_truth_logits, descending=True, dim=-1)  # [num_samples, num_crops]
 
     num_positive = max(1, int(num_crops * top_k_percent))
     pos_indices = sorted_indices[:, :num_positive]  # [num_samples, num_positive]
     neg_indices = sorted_indices[:, -num_positive:] # [num_samples, num_positive]
 
-    pos_samples = images.gather(dim=1, index=pos_indices.unsqueeze(-1).expand(-1, -1, *images.shape[2:])).flatten(0, 1)
-    pos_labels = labels.gather(dim=1, index=pos_indices).flatten()
+    def gather_samples_and_labels(images, indices, labels):
+        if images.dim() == 3:  # [B, N, d]
+            index = indices.unsqueeze(-1).expand(-1, -1, images.size(2))  # Shape: [B, K, d]
+        elif images.dim() == 5:  # [B, N, C, H, W]
+            index = indices.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).expand(-1, -1, *images.shape[2:])  # Shape: [B, K, C, H, W]
 
-    neg_samples = images.gather(dim=1, index=neg_indices.unsqueeze(-1).expand(-1, -1, *images.shape[2:])).flatten(0, 1)
-    neg_labels = labels.gather(dim=1, index=neg_indices).flatten()
+        samples = images.gather(dim=1, index=index).flatten(0, 1)  # Shape: [B * K, ...]
+        sample_labels = labels.gather(dim=1, index=indices).flatten()  # Shape: [B * K]
+        return samples, sample_labels
+    
+    pos_samples, pos_labels = gather_samples_and_labels(images, pos_indices, labels)
+    neg_samples, neg_labels = gather_samples_and_labels(images, neg_indices, labels)
 
     return pos_samples, pos_labels, neg_samples, neg_labels
-
 
 
 def entropy_select_topk(p, top_k, label):

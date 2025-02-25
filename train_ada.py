@@ -48,20 +48,8 @@ def reset_cfg(cfg, args):
     if args.head:
         cfg.MODEL.HEAD.NAME = args.head
 
-    if args.lambda_ct:
-        cfg.lambda_ct = args.lambda_ct
-    
-    if args.lambda_dt:
-        cfg.lambda_dt = args.lambda_dt
-    
-    if args.temp_ct:
-        cfg.temp_ct = args.temp_ct
-
     if args.topk:
         cfg.topk = args.topk
-
-    if args.topk_neg: 
-        cfg.topk_neg = args.topk_neg
 
 
 def extend_cfg(cfg):
@@ -79,7 +67,7 @@ def extend_cfg(cfg):
 
     
     cfg.TRAINER.ADAPTERS = CN()
-    cfg.TRAINER.ADAPTERS.PREC = "fp32"  # fp16, fp32, amp
+    cfg.TRAINER.ADAPTERS.PREC = "amp"  # fp16, fp32, amp
     cfg.TRAINER.ADAPTERS.LAMBDA = 1.0
     cfg.TRAINER.ADAPTERS.LAMBDA_NEG = 1.0
  
@@ -186,14 +174,11 @@ def main(args):
         trainer.load_model(args.model_dir, epoch=args.load_epoch)
         trainer.test()
         return
-    if cfg.TRAINER.ADAPTERS.USE_TEXT_ADAPTER and (not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER):
-        assert args.text_adapter_dir is not None, "text_adapter_dir must be specified when using a pretrained text adapter."
-        trainer.load_model(args.text_adapter_dir, epoch=args.load_epoch, module_name='text_adapter')
     
     if not args.no_train:
-        # import pdb; pdb.set_trace()
-        trainer.eval_ood(args)
-        # trainer.train(args)
+        #import pdb; pdb.set_trace()
+        # trainer.eval_ood(args)
+        trainer.train(args)
 
 
 if __name__ == "__main__":
@@ -234,12 +219,11 @@ if __name__ == "__main__":
         help="modify config options using the command-line",
     )
     # augment for LoCoOp
-    parser.add_argument('--temp_ct', default=0.07, type=float)
     parser.add_argument('--topk', type=int, default=10, help='topk')
     # argment for MCM and GL-MCM
     parser.add_argument('--in_dataset', default='imagenet', type=str,
                         choices=['imagenet'], help='in-distribution dataset')
-    parser.add_argument('-b', '--batch-size', default=128, type=int, help='mini-batch size')
+    parser.add_argument('-b', '--batch-size', default=16, type=int, help='mini-batch size')
     parser.add_argument('--T', type=float, default=1, help='temperature parameter')
     
     # argument for choosing negative labels 

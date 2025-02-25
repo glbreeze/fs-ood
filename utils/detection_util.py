@@ -124,7 +124,7 @@ def get_feats(data_loader, model, datum=False):
                 labels = labels.repeat_interleave(images.shape[1]) 
                 images = images.view(-1, images.shape[-3], images.shape[-2], images.shape[-1])  # Flatten the second dimension
                 
-            output, _, image_feature, _ = model(images.cuda())
+            output, image_feature = model(images.cuda())
             
             image_feats.append(image_feature.cpu())
             all_labels.append(labels)

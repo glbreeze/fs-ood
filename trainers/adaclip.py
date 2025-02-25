@@ -1,6 +1,7 @@
 import os.path as osp
-import os
+import os, gc
 import wandb
+import random
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -26,6 +27,10 @@ from .locoop import PromptLearner
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
+
+def debug_memory():
+    print(f"Allocated memory: {torch.cuda.memory_allocated() / 1024 ** 2} MB")
+    print(f"Cached memory: {torch.cuda.memory_reserved() / 1024 ** 2} MB")
 
 
 def load_clip_to_cpu(cfg):
@@ -89,21 +94,22 @@ class CustomCLIP(nn.Module):
     def __init__(self, cfg, classnames, clip_model):
         super().__init__()
         self.cfg = cfg
-        self.image_encoder = clip_model.visual
-        self.text_encoder = TextEncoder(clip_model)
-        self.logit_scale = clip_model.logit_scale
         self.dtype = clip_model.dtype
-        self.clip_model = clip_model
-        self.clip_token_embedding = clip_model.token_embedding
         self.classnames = classnames
         
+        self.image_encoder = clip_model.visual
+        self.text_encoder = TextEncoder(clip_model)
+        
+        self.clip_model = clip_model
+        self.clip_token_embedding = clip_model.token_embedding
+        self.logit_scale = clip_model.logit_scale
+
         # ===== postive and negative text embeddings 
         dump_dict = torch.load('datasets/imagenet_neg/neg_embedding.pth')
-        self.text_features_neg = dump_dict['neg_emb'].type(clip_model.dtype)
+        self.text_features_neg = dump_dict['neg_emb'].type(self.dtype)
         self.classnames_neg = dump_dict['neg_name']
-        self.num_neg = len(self.classnames_neg)
         print('Load computed negative labels from :datasets/imagenet_neg/neg_embedding.pth')
-
+        
         self.load_clip_text_features(classnames)
 
         # ===== init text prompt learner =====
@@ -112,12 +118,11 @@ class CustomCLIP(nn.Module):
             
         # ===== init image adapter =====
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
-            self.image_adapter = Adapter(clip_model, reduction=cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, ratio=cfg.TRAINER.IMAGE_ADAPTER.RATIO)  # Assuming ImageAdapter is a class for the image adapter
+            self.image_adapter = Adapter(clip_model, reduction=cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, ratio=cfg.TRAINER.IMAGE_ADAPTER.RATIO) 
     
     def init_text_prompt_learner(self, classnames):
-        self.prompt_learner = PromptLearner(self.cfg, self.clip_model, classnames=classnames)
-        self.tokenized_prompts = self.prompt_learner.tokenized_prompts
-    
+        self.prompt_learner = PromptLearner(self.cfg, self.clip_model.to(torch.device("cpu")), classnames=classnames)
+        
     def load_clip_text_features(self, classnames):
         self.num_pos = len(classnames)
         text_feat_file = f"datasets/text_features_{self.cfg.DATASET.NAME}_{self.cfg.DATASET.SUBSAMPLE_CLASSES}.pth"
@@ -136,28 +141,30 @@ class CustomCLIP(nn.Module):
 
     def forward(self, image, use_ori_clip=False):
         # ===== get image features =====
-        image_features, local_image_features = self.image_encoder(image.type(self.dtype))
+        self.image_encoder.eval()
+        with torch.no_grad():
+            image_features, _ = self.image_encoder(image.type(self.dtype))
         
         if self.cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER and (not use_ori_clip):
             image_features = self.image_adapter(image_features)
         
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        local_image_features = local_image_features / local_image_features.norm(dim=-1, keepdim=True)
+        # local_image_features = local_image_features / local_image_features.norm(dim=-1, keepdim=True)
 
         # ===== get text features =====
         if self.cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and (not use_ori_clip):
             prompts = self.prompt_learner()
-            tokenized_prompts = self.tokenized_prompts
+            tokenized_prompts = self.prompt_learner.tokenized_prompts
             text_features = self.text_encoder(prompts, tokenized_prompts)
         else:
-            text_features = torch.cat([self.text_features.to(image.device), self.text_features_neg.to(image.device)], dim=0)            
+            text_features = torch.cat([self.text_features, self.text_features_neg], dim=0).to(image.device)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
         # ===== calculate logits =====
         logit_scale = self.logit_scale.exp()
         logits = logit_scale * image_features @ text_features.t()
-        logits_local = logit_scale * local_image_features @ text_features.T
-        return logits, logits_local, image_features, local_image_features
+        # logits_local = logit_scale * local_image_features @ text_features.T
+        return logits, image_features # , logits_local, local_image_features
     
     def refine_negative_samples(self, args, proto_filter=True):
         with torch.no_grad():
@@ -188,15 +195,20 @@ class CustomCLIP(nn.Module):
             
             # Filter negatives: Keep only those which are not similar to prototypes
             if proto_filter and hasattr(self, "prototypes"):
-                sim_proto = self.prototypes @ torch.cat([self.text_features, self.text_features_neg], dim=0).T
+                sim_proto = self.prototypes.to(self.text_features.device) @ torch.cat([self.text_features, self.text_features_neg], dim=0).T
                 _, id_max = torch.max(sim_proto, dim=-1)
                 mask = id_max >= len(self.text_features)
                 indices_to_drop = set((id_max[mask] - len(self.text_features)).tolist())
                 indices_to_keep = torch.tensor([i for i in range(len(self.text_features_neg)) if i not in indices_to_drop], device=id_max.device)
                 self.text_features_neg = self.text_features_neg[indices_to_keep]
                 self.classnames_neg = [self.classnames_neg[i] for i in indices_to_keep.tolist()]
+            
+            num_neg_labels = min(500, len(self.classnames_neg))
+            sample_indices = random.sample(range(len(self.classnames_neg)), num_neg_labels)
+            self.text_features_neg = self.text_features_neg[sample_indices].type(self.dtype)
+            self.classnames_neg = [self.classnames_neg[i] for i in sample_indices]
+            self.num_neg = len(self.classnames_neg)
 
-            self.num_neg = len(self.text_features_neg)
             print(f"Number of negative samples after filtering: {self.num_neg}")
             torch.save({'neg_emb': self.text_features_neg.cpu(), 'neg_name': self.classnames_neg},
                     os.path.join('datasets/imagenet_neg', f'neg_embedding_l{args.pct_low}p{args.pct}.pth'))
@@ -209,8 +221,20 @@ class CustomCLIP(nn.Module):
     def to_device(self, device):
         """Moves the model and related tensors to the specified device."""
         self.to(device)
-        self.text_features = self.text_features.to(device)
-        self.text_features_neg = self.text_features_neg.to(device)
+        # self.text_features = self.text_features.to(device)
+        # self.text_features_neg = self.text_features_neg.to(device)
+        
+        if hasattr(self, "prompt_learner"):
+            self.prompt_learner.to(device)
+            self.prompt_learner.tokenized_prompts = self.prompt_learner.tokenized_prompts.to(device)
+
+        if hasattr(self, "image_adapter"):
+            self.image_adapter.to(device)
+
+        for name, buf in self.named_buffers():
+            setattr(self, name, buf.to(device))
+
+        print(f"Model and related tensors moved to {device}")
 
 
 def is_label_in_topk(logits, labels, k):
@@ -256,12 +280,12 @@ class AdaClip(TrainerX):
                 self.register_model("image_adapter", self.model.image_adapter)
                 
         if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_ADAPTER:
-                self.optim_txt = build_optimizer(self.model.text_adapter, cfg.OPTIM)
+            if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
+                self.optim_txt = build_optimizer(self.model.prompt_learner, cfg.OPTIM)
                 self.sched_txt = build_lr_scheduler(self.optim_txt, cfg.OPTIM)
-                self.register_model("text_adapter", self.model.text_adapter, self.optim_txt, self.sched_txt)
+                self.register_model("prompt_leaner", self.model.prompt_learner, self.optim_txt, self.sched_txt)
             else:
-                self.register_model("text_adapter", self.model.text_adapter)
+                self.register_model("prompt_learner", self.model.prompt_learner)
 
         self.scaler = GradScaler() if cfg.TRAINER.ADAPTERS.PREC == "amp" else None
 
@@ -275,31 +299,25 @@ class AdaClip(TrainerX):
     def compute_class_prototypes(self):
         self.set_model_mode("eval")
         all_features, all_labels = [], []
-        for epoch in range(2):
+        for epoch in range(1):
             for batch_idx, batch in enumerate(self.train_loader_x):
                 image, label = self.parse_batch_train(batch)
-                
-                if isinstance(image, tuple) or isinstance(image, list):  # Two-crop augmentation scenario
-                    global_crop, local_crop = image
-                else:
-                    global_crop = image
+                image = image.view(-1, *image.shape[2:])
+                label = torch.repeat_interleave(label, self.cfg.INPUT.NUM_CROPS)
 
                 with torch.no_grad():
-                    logits, _, feature, _ = self.model(global_crop.type(self.model.dtype))
+                    logits, feature = self.model(image.type(self.model.dtype), use_ori_clip=True)
                     probs = F.softmax(logits, dim=-1)
-                    keep_prob_mask = probs[torch.arange(probs.size(0)), label] > 0.05
+                    pos_feat, pos_label, neg_feat, neg_label = filter_positive_negative(logits, feature, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=0.2)
                     
-                    topk_check = is_label_in_topk(logits, label, self.cfg.topk)
-
-                    keep_mask = keep_prob_mask & topk_check
-
-                    feature = feature[keep_mask]
-                    label = label[keep_mask]
-
-                all_features.append(feature/feature.norm(dim=-1, keepdim=True))
-                all_labels.append(label)
-            
-        # Concatenate all features and labels
+                    # keep_prob_mask = probs[torch.arange(probs.size(0)), label] > 0.02
+                    # topk_check = is_label_in_topk(logits, label, self.cfg.topk)
+                    # keep_mask = keep_prob_mask & topk_check
+                    # feature = feature[keep_mask]
+                    # label = label[keep_mask]
+                all_features.append(pos_feat/pos_feat.norm(dim=-1, keepdim=True))
+                all_labels.append(pos_label)
+                
         all_features = torch.cat(all_features, dim=0)
         all_labels = torch.cat(all_labels, dim=0)
         
@@ -316,30 +334,34 @@ class AdaClip(TrainerX):
 
         self.model.prototypes = prototypes / prototypes.norm(dim=-1, keepdim=True)
         self.model.class_covariances = covariances
+        torch.save({"prototypes": self.model.prototypes, "class_covariances": self.model.class_covariances}, "datasets/model_prototypes_covariances.pth")
 
     def forward_backward(self, batch):
         image, label = self.parse_batch_train(batch)
         if self.cfg.INPUT.NUM_CROPS > 1: 
+            image = image.view(-1, *image.shape[2:])
             label = torch.repeat_interleave(label, self.cfg.INPUT.NUM_CROPS)
 
         use_amp = self.cfg.TRAINER.ADAPTERS.PREC == "amp"
         with autocast(enabled=use_amp):
             
             with torch.no_grad():
-                output_fz, _, image_feats_fz, _ = self.model(image, use_ori_clip=True)
+                output_fz, image_feats_fz = self.model(image, use_ori_clip=True)
                 pos_img, pos_label, neg_img, neg_label = filter_positive_negative(output_fz, image, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=0.2)
-                
+                del output_fz, image_feats_fz
+                gc.collect()
+                torch.cuda.empty_cache()
             if pos_img.numel() > 0:
-                output_pos, _, image_feats_pos, _ = self.model(pos_img)
+                output_pos, image_feats_pos = self.model(pos_img)
                 loss_pos = F.cross_entropy(output_pos, pos_label)
                 loss_pos_pt = 1 - F.cosine_similarity(image_feats_pos, self.model.prototypes[pos_label], dim=-1).mean()
             else: 
                 loss_pos, loss_pos_pt = torch.tensor(0.0, device=image.device), torch.tensor(0.0, device=image.device)
             if neg_img.numel() > 0:
-                output_neg, _, image_feats_neg, _ = self.model(neg_img)
+                output_neg, image_feats_neg = self.model(neg_img)
                 prob_neg = F.softmax(output_neg, dim=-1)  # Shape: [B, K_pos + K_neg]
 
-                loss_neg = (prob_neg[:, self.model.num_neg:].sum(dim=-1) / prob_neg.sum(dim=-1)).mean()
+                loss_neg = -torch.log(prob_neg[:, self.model.num_neg:] / prob_neg.sum(dim=-1)).mean()
                 loss_neg_pt = F.cosine_similarity(image_feats_neg, self.model.prototypes[neg_label], dim=-1).mean()
             else:
                 loss_neg, loss_neg_pt= torch.tensor(0.0, device=image.device), torch.tensor(0.0, device=image.device)
@@ -411,17 +433,25 @@ class AdaClip(TrainerX):
             self._models[name].load_state_dict(state_dict, strict=False)
     
     def before_train(self, args):
-        self.compute_class_prototypes()
-        torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth')
+        #self.compute_class_prototypes()
+        #torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth')
+        checkpoint = torch.load('datasets/proto_var.pth')
+        self.model.prototypes = checkpoint['proto'].type(self.model.dtype)
+        self.model.class_covariances = checkpoint['var'].type(self.model.dtype)
+        
         self.model.refine_negative_samples(args)
 
         if self.cfg.TRAINER.LOCOOP.NEG:
             self.model.init_text_prompt_learner(self.model.classnames + self.model.classnames_neg)
+            self.model.to_device(self.device)
+        del self.model.clip_model
+        torch.cuda.empty_cache()
         
     def train(self, args=None):
-        self.before_train()
+        self.before_train(args)
         for self.epoch in range(self.start_epoch, self.max_epoch):
             self.before_epoch()
+            import pdb; pdb.set_trace()
             self.run_epoch()
             self.after_epoch()
             
