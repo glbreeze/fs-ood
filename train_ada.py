@@ -67,7 +67,7 @@ def extend_cfg(cfg):
 
     
     cfg.TRAINER.ADAPTERS = CN()
-    cfg.TRAINER.ADAPTERS.PREC = "amp"  # fp16, fp32, amp
+    cfg.TRAINER.ADAPTERS.PREC = "fp16"  # fp16, fp32, amp
     cfg.TRAINER.ADAPTERS.LAMBDA = 1.0
     cfg.TRAINER.ADAPTERS.LAMBDA_NEG = 1.0
  

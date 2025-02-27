@@ -246,6 +246,7 @@ class VisionTransformer(nn.Module):
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
 
     def forward(self, x: torch.Tensor):
+        # dtype = x.dtype
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         hw_shape = (x.shape[2], x.shape[3])
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
@@ -380,12 +381,15 @@ class CLIP(nn.Module):
         return self.visual(image.type(self.dtype))
 
     def encode_text(self, text):
+        # dtype = x.dtype
         x = self.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
 
         x = x + self.positional_embedding.type(self.dtype)
         x = x.permute(1, 0, 2)  # NLD -> LND
         x, q, k, v = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
+        
+        # x = self.ln_final(x.to(torch.float32)).to(dtype)
         x = self.ln_final(x).type(self.dtype)
 
         # take features from the eot embedding (eot_token is the highest number in each sequence)

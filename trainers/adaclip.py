@@ -21,6 +21,7 @@ from dassl.utils import load_pretrained_weights, load_checkpoint
 from dassl.optim import build_optimizer, build_lr_scheduler
 
 from clip_w_local import clip
+from clip_w_local.model import LayerNorm
 from clip_w_local.simple_tokenizer import SimpleTokenizer as _Tokenizer
 from .utils import SupConLoss, CUSTOM_TEMPLATES, entropy_select_topk, filter_positive_negative
 from .locoop import PromptLearner
@@ -105,16 +106,20 @@ class CustomCLIP(nn.Module):
         self.logit_scale = clip_model.logit_scale
 
         # ===== postive and negative text embeddings 
-        dump_dict = torch.load('datasets/imagenet_neg/neg_embedding.pth')
+        dump_dict = torch.load('datasets/imagenet_neg/neg_embedding_refined.pth')  # neg_embedding.pth
         self.text_features_neg = dump_dict['neg_emb'].type(self.dtype)
         self.classnames_neg = dump_dict['neg_name']
-        print('Load computed negative labels from :datasets/imagenet_neg/neg_embedding.pth')
+        print('Load computed negative labels from :datasets/imagenet_neg/neg_embedding_refined.pth')
+        
+        subset_num = 100
+        self.text_features_neg = self.text_features_neg[:subset_num]
+        self.classnames_neg = self.classnames_neg[:subset_num]
         
         self.load_clip_text_features(classnames)
 
         # ===== init text prompt learner =====
         if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            self.init_text_prompt_learner(classnames)
+            self.init_text_prompt_learner(classnames + self.classnames_neg if self.cfg.TRAINER.LOCOOP.NEG else [])
             
         # ===== init image adapter =====
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
@@ -203,7 +208,7 @@ class CustomCLIP(nn.Module):
                 self.text_features_neg = self.text_features_neg[indices_to_keep]
                 self.classnames_neg = [self.classnames_neg[i] for i in indices_to_keep.tolist()]
             
-            num_neg_labels = min(500, len(self.classnames_neg))
+            num_neg_labels = min(4000, len(self.classnames_neg))
             sample_indices = random.sample(range(len(self.classnames_neg)), num_neg_labels)
             self.text_features_neg = self.text_features_neg[sample_indices].type(self.dtype)
             self.classnames_neg = [self.classnames_neg[i] for i in sample_indices]
@@ -255,16 +260,21 @@ class AdaClip(TrainerX):
         classnames = self.dm.dataset.classnames
 
         print(f"Loading CLIP (backbone: {cfg.MODEL.BACKBONE.NAME})")
-        clip_model = load_clip_to_cpu(cfg)
+        self.clip_model = load_clip_to_cpu(cfg)
 
         if cfg.TRAINER.ADAPTERS.PREC == "fp32" or cfg.TRAINER.ADAPTERS.PREC == "amp":
-            clip_model = clip_model.float()  # CLIP's default precision is fp16
+            self.clip_model = self.clip_model.float()  # CLIP's default precision is fp16
         elif cfg.TRAINER.ADAPTERS.PREC == "fp16":
-            clip_model.half()
+            self.clip_model = self.clip_model.half()
 
         print("Building custom CLIP")
-        self.model = CustomCLIP(cfg, classnames, clip_model)
+        self.model = CustomCLIP(cfg, classnames, self.clip_model)
         self.model.to_device(self.device)
+        
+        for name, module in self.model.named_modules():
+            if isinstance(module, LayerNorm):
+                module.float()
+                print(f"Converted parameters of {name} to float32.")
 
         print("Turning off gradients in both the image and the text encoder")
         for name, param in self.model.named_parameters():
@@ -299,7 +309,7 @@ class AdaClip(TrainerX):
     def compute_class_prototypes(self):
         self.set_model_mode("eval")
         all_features, all_labels = [], []
-        for epoch in range(1):
+        for epoch in range(2):
             for batch_idx, batch in enumerate(self.train_loader_x):
                 image, label = self.parse_batch_train(batch)
                 image = image.view(-1, *image.shape[2:])
@@ -344,7 +354,7 @@ class AdaClip(TrainerX):
 
         use_amp = self.cfg.TRAINER.ADAPTERS.PREC == "amp"
         with autocast(enabled=use_amp):
-            
+            import pdb; pdb.set_trace()
             with torch.no_grad():
                 output_fz, image_feats_fz = self.model(image, use_ori_clip=True)
                 pos_img, pos_label, neg_img, neg_label = filter_positive_negative(output_fz, image, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=0.2)
@@ -361,7 +371,7 @@ class AdaClip(TrainerX):
                 output_neg, image_feats_neg = self.model(neg_img)
                 prob_neg = F.softmax(output_neg, dim=-1)  # Shape: [B, K_pos + K_neg]
 
-                loss_neg = -torch.log(prob_neg[:, self.model.num_neg:] / prob_neg.sum(dim=-1)).mean()
+                loss_neg = -torch.log((prob_neg[:, -len(self.model.text_features_neg):].sum(dim=-1) + 1e-9) / (prob_neg.sum(dim=-1) + 1e-9)).mean()
                 loss_neg_pt = F.cosine_similarity(image_feats_neg, self.model.prototypes[neg_label], dim=-1).mean()
             else:
                 loss_neg, loss_neg_pt= torch.tensor(0.0, device=image.device), torch.tensor(0.0, device=image.device)
@@ -433,25 +443,27 @@ class AdaClip(TrainerX):
             self._models[name].load_state_dict(state_dict, strict=False)
     
     def before_train(self, args):
-        #self.compute_class_prototypes()
-        #torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth')
+        # self.compute_class_prototypes()
+        # torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth')
         checkpoint = torch.load('datasets/proto_var.pth')
         self.model.prototypes = checkpoint['proto'].type(self.model.dtype)
         self.model.class_covariances = checkpoint['var'].type(self.model.dtype)
         
-        self.model.refine_negative_samples(args)
-
-        if self.cfg.TRAINER.LOCOOP.NEG:
-            self.model.init_text_prompt_learner(self.model.classnames + self.model.classnames_neg)
-            self.model.to_device(self.device)
-        del self.model.clip_model
-        torch.cuda.empty_cache()
+        # import pdb; pdb.set_trace()
+        # self.model.refine_negative_samples(args)
+        # torch.save({'neg_emb': self.model.text_features_neg, 'neg_name': self.model.classnames_neg}, 'datasets/imagenet_neg/neg_embedding_refined.pth')
+        # print('Saved refined negative labels')
+        
+        # if self.cfg.TRAINER.LOCOOP.NEG:
+        #     self.model.init_text_prompt_learner(self.model.classnames + self.model.classnames_neg)
+        #     self.model.to_device(self.device)
+        # del self.model.clip_model
+        # torch.cuda.empty_cache()
         
     def train(self, args=None):
         self.before_train(args)
         for self.epoch in range(self.start_epoch, self.max_epoch):
             self.before_epoch()
-            import pdb; pdb.set_trace()
             self.run_epoch()
             self.after_epoch()
             
