@@ -153,6 +153,7 @@ def main(args):
         return
 
     if not args.no_train:
+        import pdb; pdb.set_trace()
         trainer.train(args)
 
 

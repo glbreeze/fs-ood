@@ -171,6 +171,7 @@ class QuickGELU(nn.Module):
         return x * torch.sigmoid(1.702 * x)
 
 
+
 class ResidualAttentionBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
         super().__init__()
@@ -194,23 +195,23 @@ class ResidualAttentionBlock(nn.Module):
         return self.attn(x, x, x, need_weights=True, attn_mask=self.attn_mask)[1]
 
     def forward(self, x: torch.Tensor, return_attention: bool = False):
-        y = self.ln_1(x)
-        y = y.permute(1, 0, 2)
-        y = F.linear(y, self.attn.in_proj_weight, self.attn.in_proj_bias)
-        N, L, C = y.shape
-        y = y.view(N, L, 3, C // 3).permute(2, 0, 1, 3).reshape(3 * N, L, C // 3)
-        y = F.linear(y, self.attn.out_proj.weight, self.attn.out_proj.bias)
-        q, k, v = y.tensor_split(3, dim=0)
-        v = v.permute(1, 0, 2)
-        q = q.permute(1, 0, 2)
-        k = k.permute(1, 0, 2)
-        v += x
-        v = v + self.mlp(self.ln_2(v))
+        # y = self.ln_1(x)
+        # y = y.permute(1, 0, 2)
+        # y = F.linear(y, self.attn.in_proj_weight, self.attn.in_proj_bias)
+        # N, L, C = y.shape
+        # y = y.view(N, L, 3, C // 3).permute(2, 0, 1, 3).reshape(3 * N, L, C // 3)
+        # y = F.linear(y, self.attn.out_proj.weight, self.attn.out_proj.bias)
+        # q, k, v = y.tensor_split(3, dim=0)
+        # v = v.permute(1, 0, 2)
+        # q = q.permute(1, 0, 2)
+        # k = k.permute(1, 0, 2)
+        # v += x
+        # v = v + self.mlp(self.ln_2(v))
 
         x = x + self.attention(self.ln_1(x))
         x = x + self.mlp(self.ln_2(x))
 
-        return x, q, k, v
+        return x #, q, k, v
 
 
 class Transformer(nn.Module):
@@ -224,8 +225,9 @@ class Transformer(nn.Module):
     def forward(self, x: torch.Tensor):
         # return self.resblocks(x)
         for i in range(self.layers):
-            x, q, k, v = self.resblocks[i](x)
-        return x, q, k, v
+            # x, q, k, v = self.resblocks[i](x)
+            x = self.resblocks[i](x)
+        return x #, q, k, v
 
 
 class VisionTransformer(nn.Module):
@@ -256,28 +258,29 @@ class VisionTransformer(nn.Module):
         x = self.ln_pre(x)
 
         x = x.permute(1, 0, 2)  # NLD -> LND
-        x, q, k, v = self.transformer(x)
+        # x, q, k, v = self.transformer(x)
+        x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
-        q = q.permute(1, 0, 2)
-        k = k.permute(1, 0, 2)
-        v = v.permute(1, 0, 2)
+        # q = q.permute(1, 0, 2)
+        # k = k.permute(1, 0, 2)
+        # v = v.permute(1, 0, 2)
 
-        v = self.ln_post(v)
+        # v = self.ln_post(v)
 
-        q = q[:, 1:]
-        k = k[:, 1:]
-        v = v[:, 1:]
+        # q = q[:, 1:]
+        # k = k[:, 1:]
+        # v = v[:, 1:]
 
         out = x[:, 1:]
         B, _, C = out.shape
-        v = v.reshape(B, -1, C).contiguous()
+        # v = v.reshape(B, -1, C).contiguous()
 
         x = self.ln_post(x[:, 0, :])
 
         if self.proj is not None:
             x = x @ self.proj
-            feat = v @ self.proj
-        return x, feat
+            # feat = v @ self.proj
+        return x #, feat
 
 
 class CLIP(nn.Module):
@@ -386,7 +389,8 @@ class CLIP(nn.Module):
 
         x = x + self.positional_embedding.type(self.dtype)
         x = x.permute(1, 0, 2)  # NLD -> LND
-        x, q, k, v = self.transformer(x)
+        # x, q, k, v = self.transformer(x)
+        x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
         
         # x = self.ln_final(x.to(torch.float32)).to(dtype)
@@ -398,7 +402,8 @@ class CLIP(nn.Module):
         return x
 
     def forward(self, image, text):
-        image_features, local_feat = self.encode_image(image)
+        # image_features, local_feat = self.encode_image(image)
+        image_features = self.encode_image(image)
         text_features = self.encode_text(text)
 
         # normalized features
