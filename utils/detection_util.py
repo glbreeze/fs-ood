@@ -105,12 +105,13 @@ def get_and_print_results(in_score, out_score, auroc_list, aupr_list, fpr_list):
 
     auroc = np.mean(aurocs); aupr = np.mean(auprs); fpr = np.mean(fprs)
     auroc_list.append(auroc); aupr_list.append(aupr); fpr_list.append(fpr)  # used to calculate the avg over multiple OOD test sets
-    print("FPR:{}, AUROC:{}, AURPC:{}".format(fpr, auroc, aupr))
+    return fpr, auroc, aupr
 
 
 def get_feats(data_loader, model, datum=False):
     image_feats = []
     all_labels = []
+    all_logits = []
     model.eval()
     
     with torch.no_grad():
@@ -127,9 +128,10 @@ def get_feats(data_loader, model, datum=False):
             output, image_feature = model(images.cuda())
             
             image_feats.append(image_feature.cpu())
+            all_logits.append(output.cpu())
             all_labels.append(labels)
             
             del images, output, image_feature, labels
             torch.cuda.empty_cache()
         
-    return torch.cat(image_feats, dim=0).cuda(), torch.cat(all_labels, dim=0).cuda()
+    return torch.cat(image_feats, dim=0), torch.cat(all_labels, dim=0), torch.cat(all_logits, dim=0)
