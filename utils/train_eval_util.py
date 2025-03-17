@@ -30,7 +30,7 @@ def set_val_loader(args, preprocess=None, subset=False, subset_cnt=100, num_clas
             normalize
         ])
   
-    kwargs = {'num_workers': 4, 'pin_memory': True}
+    kwargs = {'num_workers': 2, 'pin_memory': True}
     if args.in_dataset == "imagenet":
         dataset = datasets.ImageFolder('/imagenet/val', transform=preprocess)
         if subset or num_classes is not None:
@@ -74,5 +74,5 @@ def set_ood_loader_ImageNet(args, out_dataset, preprocess=None):
         testsetout = datasets.ImageFolder(root=os.path.join(args.root, 'Texture', 'images'),
                                           transform=preprocess)
     testloaderOut = torch.utils.data.DataLoader(testsetout, batch_size=args.batch_size,
-                                                shuffle=False, num_workers=4)
+                                                shuffle=False, num_workers=2)
     return testloaderOut

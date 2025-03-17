@@ -12,6 +12,13 @@ import trainers.adaclip
 import datasets.imagenet
 
 
+def cfg_to_dict(cfg_node):
+    """Convert a CfgNode to a dictionary."""
+    if not isinstance(cfg_node, CN):
+        return cfg_node
+    return {k: cfg_to_dict(v) for k, v in cfg_node.items()}
+
+
 def print_args(args, cfg):
     print("***************")
     print("** Arguments **")
@@ -163,10 +170,11 @@ def main(args):
     os.environ["WANDB_CACHE_DIR"] = "/scratch/lg154/sseg/.cache/wandb"
     os.environ["WANDB_CONFIG_DIR"] = "/scratch/lg154/sseg/.config/wandb"
     run_name = cfg.OUTPUT_DIR if cfg.OUTPUT_DIR else "default_run"
-    wandb.init(project='fs_ood', name=run_name)
+    wandb.init(project='fs_ood_ada', name=run_name)
+    wandb.config.update(cfg_to_dict(cfg))
 
     # os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
-
+    import pdb; pdb.set_trace()
     torch.cuda.empty_cache()
     trainer = build_trainer(cfg)
     

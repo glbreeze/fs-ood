@@ -113,6 +113,7 @@ class CustomCLIP(nn.Module):
         
         subset_num = 800
         self.text_features_neg = self.text_features_neg[:subset_num]
+        self.text_features_neg = self.text_features_neg / self.text_features_neg.norm(dim=-1, keepdim=True)
         self.classnames_neg = self.classnames_neg[:subset_num]
         
         self.load_clip_text_features(classnames)
@@ -127,6 +128,14 @@ class CustomCLIP(nn.Module):
     
     def init_text_prompt_learner(self, classnames):
         self.prompt_learner = PromptLearner(self.cfg, self.clip_model.to(torch.device("cpu")), classnames=classnames)
+    
+    def load_text_prompt_features(self):
+        with torch.no_grad():
+            prompts = self.prompt_learner()
+            tokenized_prompts = self.prompt_learner.tokenized_prompts
+            text_features = self.text_encoder(prompts, tokenized_prompts)
+            self.text_features_all = text_features / text_features.norm(dim=-1, keepdim=True)
+            print("Text prompt features loaded and normalized successfully.")
         
     def load_clip_text_features(self, classnames):
         self.num_pos = len(classnames)
@@ -134,6 +143,7 @@ class CustomCLIP(nn.Module):
         if os.path.exists(text_feat_file):
             print(f"Loading precomputed text features from {text_feat_file}")
             self.text_features = torch.load(text_feat_file).type(self.clip_model.dtype)
+            self.text_features = self.text_features/self.text_features.norm(dim=-1, keepdim=True)
         else:
             print(f"Computing and saving text features to {text_feat_file}")
             with torch.no_grad():
@@ -157,14 +167,16 @@ class CustomCLIP(nn.Module):
         # local_image_features = local_image_features / local_image_features.norm(dim=-1, keepdim=True)
 
         # ===== get text features =====
-        if self.cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and (not use_ori_clip):
+        if use_ori_clip: 
+            text_features = torch.cat([self.text_features, self.text_features_neg], dim=0).to(image.device)
+        elif self.cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT and (not use_ori_clip):
             prompts = self.prompt_learner()
             tokenized_prompts = self.prompt_learner.tokenized_prompts
             text_features = self.text_encoder(prompts, tokenized_prompts)
-        else:
-            text_features = torch.cat([self.text_features, self.text_features_neg], dim=0).to(image.device)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        elif self.cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and (not self.cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT):
+            text_features = self.text_features_all.to(image.device)
+        
         # ===== calculate logits =====
         logit_scale = self.logit_scale.exp()
         logits = logit_scale * image_features.to(text_features.device) @ text_features.t()
@@ -280,7 +292,13 @@ class AdaClip(TrainerX):
         for name, param in self.model.named_parameters():
             if ("prompt_learner" not in name) and ("adapter" not in name):
                 param.requires_grad_(False)
-
+        
+        if cfg.MODEL.INIT_WEIGHTS:
+            if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
+                self.load_model(cfg.MODEL.INIT_WEIGHTS, epoch=cfg.MODEL.INIT_EPOCH, module_name='prompt_learner')
+                self.model.load_text_prompt_features
+                
+        # ============ define optimzer ============
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
             if cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
                 self.optim_img = build_optimizer(self.model.image_adapter, cfg.OPTIM)
@@ -414,18 +432,13 @@ class AdaClip(TrainerX):
     def load_model(self, directory, epoch=None, module_name=None):
         if not directory:
             print("Note that load_model() is skipped as no pretrained model is given")
-            return
 
         names = self.get_model_names() if module_name is None else [module_name]
 
-        if epoch is not None:
-            model_file = "model.pth.tar-" + str(epoch)
-        else: 
-            model_file = "model-best.pth.tar"
+        model_file = "model.pth.tar-" + str(epoch) if epoch is not None else "model-best.pth.tar"
 
         for name in names:
             model_path = osp.join(directory, name, model_file)
-
             if not osp.exists(model_path):
                 raise FileNotFoundError('Model not found at "{}"'.format(model_path))
 
@@ -433,7 +446,6 @@ class AdaClip(TrainerX):
             state_dict = checkpoint["state_dict"]
             epoch = checkpoint["epoch"]
             print("Loading weights to {} " 'from "{}" (epoch = {})'.format(name, model_path, epoch))
-            # set strict=False
             self._models[name].load_state_dict(state_dict, strict=False)
     
     def load_proto(self, args):
@@ -462,7 +474,7 @@ class AdaClip(TrainerX):
             self.run_epoch()
             self.after_epoch()
             
-            if self.epoch==0 or (self.epoch + 1) % 10 == 0:
+            if self.epoch==0 or (self.epoch + 1) % 5 == 0:
                 print(f"Running eval_ood at epoch {self.epoch + 1}")
                 self.eval_ood(args)
         self.after_train()
@@ -566,17 +578,25 @@ class AdaClip(TrainerX):
             od_score1 = od_score1.cpu().numpy()
             # torch.save({'od_maha': od_maha, 'od_idx': od_idx, 'od_sim': od_sim}, f'datasets/od_maha_{out_dataset}.pth')
             
-            print(f"------ ID score: {stats.describe(id_score)}, {out_dataset} OOD score: {stats.describe(od_score)}")
-            print(f"------ ID score 1: {stats.describe(id_score1)}, {out_dataset} OOD score 1: {stats.describe(od_score1)}")
+            # print(f"------ ID score: {stats.describe(id_score)}, {out_dataset} OOD score: {stats.describe(od_score)}")
+            # print(f"------ ID score 1: {stats.describe(id_score1)}, {out_dataset} OOD score 1: {stats.describe(od_score1)}")
 
             fpr, auroc, aupr = get_and_print_results(-id_score, -od_score, auroc_list, aupr_list, fpr_list)
-            print(f"=======> OOD data {out_dataset} Score@0, FPR:{fpr}, AUROC:{auroc}, AURPC:{aupr}")
-
             fpr1, auroc1, aupr1 = get_and_print_results(id_score1, od_score1, auroc_list1, aupr_list1, fpr_list1)
-            print(f"=======> OOD data {out_dataset} Score@1, FPR:{fpr1}, AUROC:{auroc1}, AURPC:{aupr1}")
+            # print(f"=======> OOD data {out_dataset} Score@0, FPR:{fpr}, AUROC:{auroc}, AURPC:{aupr}")
+            # print(f"=======> OOD data {out_dataset} Score@1, FPR:{fpr1}, AUROC:{auroc1}, AURPC:{aupr1}")
             # plot_distribution(args, -id_score, -od_score, out_dataset, score='new')
 
-        print("MCM avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list), np.mean(auroc_list), np.mean(aupr_list)))
+        print("OOD avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list), np.mean(auroc_list), np.mean(aupr_list)))
+        print("OOD1 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list1), np.mean(auroc_list1), np.mean(aupr_list1)))
+        wandb.log({
+            "ood/fpr": np.mean(fpr_list), 
+            "ood/auroc": np.mean(auroc_list), 
+            "ood/aupr": np.mean(aupr_list), 
+            "ood/fpr1": np.mean(fpr_list1), 
+            "ood/auroc1": np.mean(auroc_list1), 
+            "ood/aupr1": np.mean(aupr_list1)
+        }, step=(1 + self.epoch) * self.num_batches)
         
     def eval_ood1(self, args):
         self.set_model_mode("eval")
