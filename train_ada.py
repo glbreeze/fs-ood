@@ -54,9 +54,12 @@ def reset_cfg(cfg, args):
 
     if args.head:
         cfg.MODEL.HEAD.NAME = args.head
-
-    if args.topk:
-        cfg.topk = args.topk
+    
+    if args.T:
+        cfg.TEST.T = args.T
+    
+    if args.tau:
+        cfg.TEST.TAU = args.tau
 
 
 def extend_cfg(cfg):
@@ -98,6 +101,9 @@ def extend_cfg(cfg):
     cfg.TRAINER.IMAGE_ADAPTER.RATIO = 0.2
 
     cfg.DATASET.SUBSAMPLE_CLASSES = "all"  # all, base or new    # ========= need to change!! 
+    
+    cfg.TEST.T=0.01
+    cfg.TEST.TAU=0
     
     # if "two_crop" in cfg.INPUT.TRANSFORMS:
     #     cfg.INPUT.GLOBAL_RRCROP_SCALE = (0.2, 1.0)
@@ -174,7 +180,6 @@ def main(args):
     wandb.config.update(cfg_to_dict(cfg))
 
     # os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
-    import pdb; pdb.set_trace()
     torch.cuda.empty_cache()
     trainer = build_trainer(cfg)
     
@@ -185,7 +190,7 @@ def main(args):
     
     if not args.no_train:
         #import pdb; pdb.set_trace()
-        # trainer.eval_ood(args)
+        #trainer.eval_ood(args)
         trainer.train(args)
 
 
@@ -232,7 +237,9 @@ if __name__ == "__main__":
     parser.add_argument('--in_dataset', default='imagenet', type=str,
                         choices=['imagenet'], help='in-distribution dataset')
     parser.add_argument('-b', '--batch-size', default=16, type=int, help='mini-batch size')
-    parser.add_argument('--T', type=float, default=1, help='temperature parameter')
+    parser.add_argument('--T', type=float, default=0.01, help='temperature parameter')
+    parser.add_argument('--tau', type=float, default=0, help='temperature parameter')
+    
     
     # argument for choosing negative labels 
     parser.add_argument('--pct_low', default=0.2, type=float)

@@ -248,7 +248,6 @@ class VisionTransformer(nn.Module):
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
 
     def forward(self, x: torch.Tensor):
-        # dtype = x.dtype
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         hw_shape = (x.shape[2], x.shape[3])
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]

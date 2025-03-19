@@ -392,11 +392,6 @@ class SimpleTrainer(TrainerBase):
             directory = self.cfg.RESUME
         self.start_epoch = self.resume_model_if_exist(directory)
 
-        # Initialize summary writer
-        writer_dir = osp.join(self.output_dir, "tensorboard")
-        mkdir_if_missing(writer_dir)
-        self.init_writer(writer_dir)
-
         # Remember the starting time (for computing the elapsed time)
         self.time_start = time.time()
 

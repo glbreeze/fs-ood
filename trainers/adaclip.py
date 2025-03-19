@@ -1,5 +1,6 @@
 import os.path as osp
 import os, gc
+import time
 import wandb
 import random
 import torch
@@ -134,7 +135,7 @@ class CustomCLIP(nn.Module):
             prompts = self.prompt_learner()
             tokenized_prompts = self.prompt_learner.tokenized_prompts
             text_features = self.text_encoder(prompts, tokenized_prompts)
-            self.text_features_all = text_features / text_features.norm(dim=-1, keepdim=True)
+            self.text_features_all = (text_features / text_features.norm(dim=-1, keepdim=True)).cpu()
             print("Text prompt features loaded and normalized successfully.")
         
     def load_clip_text_features(self, classnames):
@@ -292,11 +293,6 @@ class AdaClip(TrainerX):
         for name, param in self.model.named_parameters():
             if ("prompt_learner" not in name) and ("adapter" not in name):
                 param.requires_grad_(False)
-        
-        if cfg.MODEL.INIT_WEIGHTS:
-            if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
-                self.load_model(cfg.MODEL.INIT_WEIGHTS, epoch=cfg.MODEL.INIT_EPOCH, module_name='prompt_learner')
-                self.model.load_text_prompt_features
                 
         # ============ define optimzer ============
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
@@ -311,9 +307,16 @@ class AdaClip(TrainerX):
             if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
                 self.optim_txt = build_optimizer(self.model.prompt_learner, cfg.OPTIM)
                 self.sched_txt = build_lr_scheduler(self.optim_txt, cfg.OPTIM)
-                self.register_model("prompt_leaner", self.model.prompt_learner, self.optim_txt, self.sched_txt)
+                self.register_model("prompt_learner", self.model.prompt_learner, self.optim_txt, self.sched_txt)
             else:
                 self.register_model("prompt_learner", self.model.prompt_learner)
+        
+        # ============ load pretrained weight =============
+        
+        if cfg.MODEL.INIT_WEIGHTS:
+            if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
+                self.load_model(cfg.MODEL.INIT_WEIGHTS, epoch=cfg.MODEL.INIT_EPOCH, module_name='prompt_learner')
+                self.model.load_text_prompt_features()
 
         self.scaler = GradScaler() if cfg.TRAINER.ADAPTERS.PREC == "amp" else None
 
@@ -370,7 +373,7 @@ class AdaClip(TrainerX):
         image, label = batch["img"], batch["label"]
         label = label.to(self.device)
         image = image.to(self.device)
-        
+    
         if self.cfg.INPUT.NUM_CROPS > 1: 
             image = image.view(-1, *image.shape[2:])
             label = torch.repeat_interleave(label, self.cfg.INPUT.NUM_CROPS)
@@ -383,7 +386,8 @@ class AdaClip(TrainerX):
                 torch.cuda.empty_cache()
             
             for optim in self._optims.values():
-                optim.zero_grad()
+                if optim is not None:
+                    optim.zero_grad()
 
             if pos_img.numel() > 0:
                 output_pos, image_feats_pos = self.model(pos_img)
@@ -404,7 +408,8 @@ class AdaClip(TrainerX):
                 (self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG*(loss_neg + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_neg_pt)).backward()
             
             for optim in self._optims.values():
-                optim.step()
+                if optim is not None:
+                    optim.step()
 
         loss_summary = {
             "loss_pos": loss_pos.item(),
@@ -455,7 +460,6 @@ class AdaClip(TrainerX):
         self.model.prototypes = checkpoint['proto'].type(self.model.dtype)
         self.model.class_covariances = checkpoint['var'].type(self.model.dtype)
         
-        # import pdb; pdb.set_trace()
         # self.model.refine_negative_samples(args)
         # torch.save({'neg_emb': self.model.text_features_neg, 'neg_name': self.model.classnames_neg}, 'datasets/imagenet_neg/neg_embedding_refined.pth')
         # print('Saved refined negative labels')
@@ -467,6 +471,7 @@ class AdaClip(TrainerX):
         # torch.cuda.empty_cache()
         
     def train(self, args=None):
+        self.time_start = time.time()
         if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
             self.load_proto(args)
         for self.epoch in range(self.start_epoch, self.max_epoch):
@@ -541,61 +546,94 @@ class AdaClip(TrainerX):
         # self.compute_class_prototypes()
         # torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth') # prototypes for ID
         # self.model.refine_negative_samples(args)
+        
+        print(f"=======> start evaluate OOD for epoch {self.epoch}")
         if not hasattr(self.model, "prototypes"):
             self.load_proto(args)
 
-        def get_id_score(data_loader, T = 1):
+        def get_id_score(data_loader, T = 0.01, tau = 0):
             all_feats, all_labels, all_sim = get_feats(data_loader, self.model)
             
-            maha = compute_mahalanobis_distance(all_feats.cuda(), self.model.prototypes.cuda(), self.model.class_covariances.cuda())
+            maha, sim_pt = compute_mahalanobis_distance(all_feats.cuda(), self.model.prototypes.cuda(), self.model.class_covariances.cuda())
             maha = maha.cpu()
             maha, idx = maha.min(dim=-1)
             pred_probs = F.softmax(all_sim / T, dim=1)
             id_score = pred_probs[torch.arange(len(pred_probs)), idx]
 
-            id_score1 = pred_probs[:, -len(self.model.text_features_neg):].sum(dim=-1)
-
-            return maha, id_score, id_score1, all_labels
+            id_score1 = 1 - pred_probs[:, -len(self.model.text_features_neg):].sum(dim=-1)  # the larger the better
+            
+            tau=0
+            energy_score = - T * torch.logsumexp(sim_pt/T, dim=-1)  # the lower the better
+            id_score2 = torch.sigmoid(-(energy_score - tau))        # the larger the better
+            
+            softmax_prob = F.softmax(sim_pt / T, dim=-1) 
+            id_score3, _ = torch.max(softmax_prob, dim=-1)          # the larger the better
+            
+            sim, _ = torch.max(sim_pt, dim=-1)
+            
+            return all_labels, maha.cpu().numpy(), id_score.cpu().numpy(), id_score1.cpu().numpy(), id_score2.cpu().numpy(), id_score3.cpu().numpy(), sim.cpu().numpy()
             
         # Load the model and preprocessing pipeline
         _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
 
         id_data_loader = set_val_loader(args, preprocess)
-        id_maha, id_score, id_score1, all_labels = get_id_score(id_data_loader)
-        id_score = id_score.cpu().numpy()    # The larger the better
-        id_score1 = id_score1.cpu().numpy()  # The smaller the better
+        all_labels, id_maha, id_score, id_score1, id_score2, id_score3, id_score4 = get_id_score(id_data_loader, T=self.cfg.TEST.T, tau=self.cfg.TEST.TAU)
         
         auroc_list, aupr_list, fpr_list = [], [], []
         auroc_list1, aupr_list1, fpr_list1 = [], [], []
+        auroc_list0, aupr_list0, fpr_list0 = [], [], []
+        auroc_list2, aupr_list2, fpr_list2 = [], [], []
+        auroc_list3, aupr_list3, fpr_list3 = [], [], []
+        auroc_list4, aupr_list4, fpr_list4 = [], [], []
         
         if args.in_dataset in ['imagenet']:
             out_datasets = ['iNaturalist', 'SUN', 'places365', 'Texture']
         for idx, out_dataset in enumerate(out_datasets):
             print(f"Evaluting OOD dataset {out_dataset}...")
             ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
-            od_maha, od_score, od_score1, _ = get_id_score(ood_loader)
-            od_score = od_score.cpu().numpy()
-            od_score1 = od_score1.cpu().numpy()
+            _, od_maha, od_score, od_score1, od_score2, od_score3, od_score4 = get_id_score(ood_loader, T=self.cfg.TEST.T, tau=self.cfg.TEST.TAU)
             # torch.save({'od_maha': od_maha, 'od_idx': od_idx, 'od_sim': od_sim}, f'datasets/od_maha_{out_dataset}.pth')
             
             # print(f"------ ID score: {stats.describe(id_score)}, {out_dataset} OOD score: {stats.describe(od_score)}")
-            # print(f"------ ID score 1: {stats.describe(id_score1)}, {out_dataset} OOD score 1: {stats.describe(od_score1)}")
+            # print(f"------ ID score 1: {stats.describe(id_score3)}, {out_dataset} OOD score 1: {stats.describe(od_score3)}")
 
             fpr, auroc, aupr = get_and_print_results(-id_score, -od_score, auroc_list, aupr_list, fpr_list)
-            fpr1, auroc1, aupr1 = get_and_print_results(id_score1, od_score1, auroc_list1, aupr_list1, fpr_list1)
+            fpr1, auroc1, aupr1 = get_and_print_results(-id_score1, -od_score1, auroc_list1, aupr_list1, fpr_list1)
+            fpr0, auroc0, aupr0 = get_and_print_results(id_maha, od_maha, auroc_list0, aupr_list0, fpr_list0)
+            fpr2, auroc2, aupr2 = get_and_print_results(-id_score2, -od_score2, auroc_list2, aupr_list2, fpr_list2)
+            fpr3, auroc3, aupr3 = get_and_print_results(-id_score3, -od_score3, auroc_list3, aupr_list3, fpr_list3)
+            fpr4, auroc4, aupr4 = get_and_print_results(-id_score4, -od_score4, auroc_list4, aupr_list4, fpr_list4)
             # print(f"=======> OOD data {out_dataset} Score@0, FPR:{fpr}, AUROC:{auroc}, AURPC:{aupr}")
             # print(f"=======> OOD data {out_dataset} Score@1, FPR:{fpr1}, AUROC:{auroc1}, AURPC:{aupr1}")
             # plot_distribution(args, -id_score, -od_score, out_dataset, score='new')
 
         print("OOD avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list), np.mean(auroc_list), np.mean(aupr_list)))
         print("OOD1 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list1), np.mean(auroc_list1), np.mean(aupr_list1)))
+        print("OOD0 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list0), np.mean(auroc_list0), np.mean(aupr_list0)))
+        print("OOD2 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list2), np.mean(auroc_list2), np.mean(aupr_list2)))
+        print("OOD3 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list3), np.mean(auroc_list3), np.mean(aupr_list3)))
+        print("OOD4 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list4), np.mean(auroc_list4), np.mean(aupr_list4)))
+        
         wandb.log({
-            "ood/fpr": np.mean(fpr_list), 
-            "ood/auroc": np.mean(auroc_list), 
-            "ood/aupr": np.mean(aupr_list), 
             "ood/fpr1": np.mean(fpr_list1), 
             "ood/auroc1": np.mean(auroc_list1), 
-            "ood/aupr1": np.mean(aupr_list1)
+            "ood/aupr1": np.mean(aupr_list1),
+            
+            "ood/fpr0": np.mean(fpr_list0), 
+            "ood/auroc0": np.mean(auroc_list0), 
+            "ood/aupr0": np.mean(aupr_list0), 
+            
+            "ood/fpr2": np.mean(fpr_list2), 
+            "ood/auroc2": np.mean(auroc_list2), 
+            "ood/aupr2": np.mean(aupr_list2),
+            
+            "ood/fpr3": np.mean(fpr_list3), 
+            "ood/auroc3": np.mean(auroc_list3), 
+            "ood/aupr3": np.mean(aupr_list3),
+            
+            "ood/fpr4": np.mean(fpr_list4), 
+            "ood/auroc4": np.mean(auroc_list4), 
+            "ood/aupr4": np.mean(aupr_list4),
         }, step=(1 + self.epoch) * self.num_batches)
         
     def eval_ood1(self, args):
@@ -728,12 +766,14 @@ def compute_mahalanobis_distance(feats, prototypes, class_covariances, batch_siz
     num_samples, feature_dim = feats.shape
     num_classes = prototypes.shape[0]
     mahalanobis_dist = torch.zeros((num_samples, num_classes), device=feats.device)
+    sim = torch.zeros((num_samples, num_classes), device=feats.device)
     
     # Process in batches to reduce memory usage
     for i in range(0, num_samples, batch_size):
         diff = feats[i:i + batch_size, None, :] - prototypes[None, :, :]  # Shape: (batch_size, num_classes, feature_dim)
         mahalanobis_dist[i:i + batch_size] = (diff ** 2 / class_covariances[None, :, :]).sum(dim=-1).sqrt()
+        sim[i:i + batch_size] = torch.einsum("bd,kd->bk", feats[i:i + batch_size] , prototypes)  # Cosine similarity
 
-    return mahalanobis_dist
+    return mahalanobis_dist, sim
 
 
