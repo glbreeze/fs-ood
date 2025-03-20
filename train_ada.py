@@ -86,6 +86,12 @@ def extend_cfg(cfg):
     
     cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER = False
     cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER = False
+
+    cfg.TRAINER.ADAPTERS.LORA = 'none' # 'vision'
+    cfg.TRAINER.ADAPTERS.LORA_POSITION = 'all'
+    cfg.TRAINER.ADAPTERS.LORA_R = 2
+    cfg.TRAINER.ADAPTERS.LORA_A = 1
+    cfg.TRAINER.ADAPTERS.LORA_DR = 0.25
     
     # Add configurations specific to the text adapter
     cfg.TRAINER.LOCOOP = CN()

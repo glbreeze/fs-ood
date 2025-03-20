@@ -29,6 +29,7 @@ from .locoop import PromptLearner
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
+from loralib.utils import apply_lora, get_lora_parameters
 
 def debug_memory():
     print(f"Allocated memory: {torch.cuda.memory_allocated() / 1024 ** 2} MB")
@@ -106,7 +107,7 @@ class CustomCLIP(nn.Module):
         self.clip_token_embedding = clip_model.token_embedding
         self.logit_scale = clip_model.logit_scale
 
-        # ===== postive and negative text embeddings 
+        # ===== positive and negative text embeddings
         dump_dict = torch.load('datasets/imagenet_neg/neg_embedding_refined.pth')  # neg_embedding.pth
         self.text_features_neg = dump_dict['neg_emb'].type(self.dtype)
         self.classnames_neg = dump_dict['neg_name']
@@ -125,8 +126,12 @@ class CustomCLIP(nn.Module):
             
         # ===== init image adapter =====
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
-            self.image_adapter = Adapter(clip_model, reduction=cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, ratio=cfg.TRAINER.IMAGE_ADAPTER.RATIO) 
-    
+            self.image_adapter = Adapter(clip_model, reduction=cfg.TRAINER.IMAGE_ADAPTER.REDUCTION, ratio=cfg.TRAINER.IMAGE_ADAPTER.RATIO)
+
+        # ====== init lora ======
+        if cfg.TRAINER.ADAPTERS.LORA == 'vision':
+            apply_lora(cfg, self.image_encoder.transformer)
+
     def init_text_prompt_learner(self, classnames):
         self.prompt_learner = PromptLearner(self.cfg, self.clip_model.to(torch.device("cpu")), classnames=classnames)
     
@@ -143,7 +148,7 @@ class CustomCLIP(nn.Module):
         text_feat_file = f"datasets/text_features_{self.cfg.DATASET.NAME}_{self.cfg.DATASET.SUBSAMPLE_CLASSES}.pth"
         if os.path.exists(text_feat_file):
             print(f"Loading precomputed text features from {text_feat_file}")
-            self.text_features = torch.load(text_feat_file).type(self.clip_model.dtype)
+            self.text_features = torch.load(text_feat_file).type(self.dtype)
             self.text_features = self.text_features/self.text_features.norm(dim=-1, keepdim=True)
         else:
             print(f"Computing and saving text features to {text_feat_file}")
@@ -151,7 +156,7 @@ class CustomCLIP(nn.Module):
                 temp = CUSTOM_TEMPLATES[self.cfg.DATASET.NAME]
                 prompts = [temp.format(c.replace('_', ' ')) for c in classnames]
                 tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])
-                self.text_features = self.clip_model.encode_text(tokenized_prompts).type(self.clip_model.dtype)
+                self.text_features = self.clip_model.encode_text(tokenized_prompts).type(self.dtype)
                 self.text_features = self.text_features/self.text_features.norm(dim=-1, keepdim=True)
                 torch.save(self.text_features, text_feat_file)
 
@@ -291,9 +296,11 @@ class AdaClip(TrainerX):
 
         print("Turning off gradients in both the image and the text encoder")
         for name, param in self.model.named_parameters():
-            if ("prompt_learner" not in name) and ("adapter" not in name):
+            if ("prompt_learner" not in name) and ("adapter" not in name) and ('lora' not in name):
                 param.requires_grad_(False)
-                
+            if ("prompt_learner" in name) and (not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT):
+                param.requires_grad_(False)
+
         # ============ define optimzer ============
         if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
             if cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
@@ -310,6 +317,11 @@ class AdaClip(TrainerX):
                 self.register_model("prompt_learner", self.model.prompt_learner, self.optim_txt, self.sched_txt)
             else:
                 self.register_model("prompt_learner", self.model.prompt_learner)
+
+        if cfg.TRAINER.ADAPTERS.LORA in ['vision', 'both']:
+            self.optim_lora = build_optimizer(self.model.image_encoder, cfg.OPTIM, param_groups=get_lora_parameters(self.model.image_adapter))
+            self.sched_lora = build_lr_scheduler(self.optim_lora, cfg.OPTIM)
+            self.register_model("image_encoder", self.model.image_encoder, self.optim_lora, self.sched_lora)
         
         # ============ load pretrained weight =============
         
