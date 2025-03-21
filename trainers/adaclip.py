@@ -106,6 +106,8 @@ class CustomCLIP(nn.Module):
         self.clip_model = clip_model
         self.clip_token_embedding = clip_model.token_embedding
         self.logit_scale = clip_model.logit_scale
+        
+        import pdb; pdb.set_trace()
 
         # ===== positive and negative text embeddings
         dump_dict = torch.load('datasets/imagenet_neg/neg_embedding_refined.pth')  # neg_embedding.pth

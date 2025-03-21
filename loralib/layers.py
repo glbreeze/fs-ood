@@ -26,7 +26,7 @@ def set_param(curr_mod, name, param=None, mode='update'):
                 p = getattr(curr_mod, name)
                 return p
 
-class LoRALayer(nn.Module):
+class LoRALayer():
     def __init__(
         self, 
         r: int, 
@@ -117,12 +117,14 @@ class LinearLoRA(nn.Linear, LoRALayer):
         fan_in_fan_out: bool = False,
         dropout_rate = 0.,
         **kwargs
-    ):
-        super().__init__(
-            in_features=existing_linear.in_features, 
-            out_features=existing_linear.out_features)
+    ):    
+        in_features = existing_linear.in_features
+        out_features = existing_linear.out_features
+        bias = existing_linear.bias is not None
         
+        nn.Linear.__init__(self, in_features, out_features,bias)
         self.load_state_dict(existing_linear.state_dict())
+        
         LoRALayer.__init__(self, r=r, lora_alpha=lora_alpha, fan_in_fan_out=fan_in_fan_out)
 
         # Actual trainable parameters
@@ -220,7 +222,7 @@ class PlainMultiheadAttentionLoRA(nn.Module):
 
         self.scaled_dot_product_attention = F.scaled_dot_product_attention
 
-        LoRALayer.__init__(self, r=r, lora_alpha=lora_alpha, dropout_rate=dropout_rate)
+        # LoRALayer.__init__(self, r=r, lora_alpha=lora_alpha, dropout_rate=dropout_rate)
         
         # Init qkv as a new lora linear layer 
         for item in enable_lora:

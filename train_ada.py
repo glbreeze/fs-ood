@@ -186,6 +186,7 @@ def main(args):
     wandb.config.update(cfg_to_dict(cfg))
 
     # os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
+    import pdb; pdb.set_trace()
     torch.cuda.empty_cache()
     trainer = build_trainer(cfg)
     
