@@ -92,7 +92,30 @@ python train_ada.py \
         TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
         TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
         INPUT.NUM_CROPS 10
-        
+
+
+
+python train_ada.py \
+        --root /vast/lg154/datasets \
+        --seed 1 \
+        --trainer AdaClip \
+        --dataset-config-file configs/datasets/imagenet.yaml \
+        --config-file configs/trainers/LoCoOp/vit_b16_ep50.yaml \
+        --load-epoch 50 \
+        --output-dir output/imagenet/adaclip/vit_b16_ep50_8shots/test \
+        DATASET.NUM_SHOTS 8 \
+        MODEL.INIT_WEIGHTS output/imagenet/adaclip/vit_b16_ep50_8shots/text_shot8_nr0.2 \
+        MODEL.INIT_EPOCH ${EP} \
+        TRAINER.ADAPTERS.USE_TEXT_PROMPT True \
+        TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT False \
+        TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
+        TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
+        TRAINER.ADAPTERS.LORA vision \
+        INPUT.NUM_CROPS 10 \
+        TRAINER.ADAPTERS.LAMBDA_NEG 0.2 \
+        TRAINER.ADAPTERS.LAMBDA 1.0
+
+
 
 # ====== train image adapter only
 

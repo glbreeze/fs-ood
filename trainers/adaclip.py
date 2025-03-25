@@ -1,6 +1,6 @@
 import os.path as osp
 import os, gc
-import time
+import time, copy
 import wandb
 import random
 import torch
@@ -106,8 +106,6 @@ class CustomCLIP(nn.Module):
         self.clip_model = clip_model
         self.clip_token_embedding = clip_model.token_embedding
         self.logit_scale = clip_model.logit_scale
-        
-        import pdb; pdb.set_trace()
 
         # ===== positive and negative text embeddings
         dump_dict = torch.load('datasets/imagenet_neg/neg_embedding_refined.pth')  # neg_embedding.pth
@@ -132,7 +130,11 @@ class CustomCLIP(nn.Module):
 
         # ====== init lora ======
         if cfg.TRAINER.ADAPTERS.LORA == 'vision':
+            self.image_encoder_base = copy.deepcopy(self.image_encoder)
+            
             apply_lora(cfg, self.image_encoder.transformer)
+            if self.dtype == torch.float16:
+                self.image_encoder.half() 
 
     def init_text_prompt_learner(self, classnames):
         self.prompt_learner = PromptLearner(self.cfg, self.clip_model.to(torch.device("cpu")), classnames=classnames)
@@ -164,8 +166,11 @@ class CustomCLIP(nn.Module):
 
     def forward(self, image, use_ori_clip=False):
         # ===== get image features =====
-        self.image_encoder.eval()
-        with torch.no_grad():
+        if use_ori_clip and hasattr(self, "image_encoder_base"):
+            self.image_encoder_base.eval()
+            with torch.no_grad():
+                image_features = self.image_encoder_base(image.type(self.dtype))
+        else: 
             image_features = self.image_encoder(image.type(self.dtype))
         
         if self.cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER and (not use_ori_clip):
@@ -243,10 +248,11 @@ class CustomCLIP(nn.Module):
                     f.write("{}\n".format(item))
                     
     def to_device(self, device):
-        """Moves the model and related tensors to the specified device."""
-        # self.to(device)
+        """Moves the model and related tensors to the specified device.""" 
         self.image_encoder.to(device)
         self.text_encoder.to(device)
+        if hasattr(self, "image_encoder_base"):
+            self.image_encoder_base.to(device)
         # self.text_features = self.text_features.to(device)
         # self.text_features_neg = self.text_features_neg.to(device)
         
@@ -321,7 +327,7 @@ class AdaClip(TrainerX):
                 self.register_model("prompt_learner", self.model.prompt_learner)
 
         if cfg.TRAINER.ADAPTERS.LORA in ['vision', 'both']:
-            self.optim_lora = build_optimizer(self.model.image_encoder, cfg.OPTIM, param_groups=get_lora_parameters(self.model.image_adapter))
+            self.optim_lora = build_optimizer(self.model.image_encoder, cfg.OPTIM, param_groups=get_lora_parameters(self.model.image_encoder))
             self.sched_lora = build_lr_scheduler(self.optim_lora, cfg.OPTIM)
             self.register_model("image_encoder", self.model.image_encoder, self.optim_lora, self.sched_lora)
         
@@ -387,7 +393,7 @@ class AdaClip(TrainerX):
         image, label = batch["img"], batch["label"]
         label = label.to(self.device)
         image = image.to(self.device)
-    
+
         if self.cfg.INPUT.NUM_CROPS > 1: 
             image = image.view(-1, *image.shape[2:])
             label = torch.repeat_interleave(label, self.cfg.INPUT.NUM_CROPS)
@@ -403,23 +409,24 @@ class AdaClip(TrainerX):
                 if optim is not None:
                     optim.zero_grad()
 
-            if pos_img.numel() > 0:
-                output_pos, image_feats_pos = self.model(pos_img)
-                loss_pos = F.cross_entropy(output_pos, pos_label)
-                loss_pos_pt = 1 - F.cosine_similarity(image_feats_pos, self.model.prototypes[pos_label], dim=-1).mean() \
-                            if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER else torch.tensor(0.0).to(loss_pos.device)
-                (loss_pos + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_pos_pt).backward()
+            output_pos, image_feats_pos = self.model(pos_img)
+            loss_pos = F.cross_entropy(output_pos, pos_label)
 
-            if neg_img.numel() > 0:
-                output_neg, image_feats_neg = self.model(neg_img)
-                prob_neg = F.softmax(output_neg, dim=-1)
-                
-                loss_neg = -torch.log((prob_neg[:, -len(self.model.text_features_neg):].sum(dim=-1) + 1e-9) /
+            output_neg, image_feats_neg = self.model(neg_img)
+            prob_neg = F.softmax(output_neg, dim=-1)
+            loss_neg = -torch.log((prob_neg[:, -len(self.model.text_features_neg):].sum(dim=-1) + 1e-9) /
                                     (prob_neg.sum(dim=-1) + 1e-9)).mean()
-                loss_neg_pt = F.cosine_similarity(image_feats_neg, self.model.prototypes[neg_label], dim=-1).mean() \
-                            if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER else torch.tensor(0.0).to(loss_neg.device)
                 
-                (self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG*(loss_neg + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_neg_pt)).backward()
+            if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER or self.cfg.TRAINER.ADAPTERS.LORA in ['vision']:
+                loss_pt = torch.clamp(
+                    F.cosine_similarity(image_feats_neg, self.model.prototypes[neg_label], dim=-1) -
+                    F.cosine_similarity(image_feats_pos, self.model.prototypes[pos_label], dim=-1) + 0.01,
+                    min = 0
+                ).mean()
+            else:
+                loss_pt = torch.tensor(0.0, device=loss_pos.device)
+                
+            (loss_pos + self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG*loss_neg + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_pt).backward()
             
             for optim in self._optims.values():
                 if optim is not None:
@@ -427,9 +434,8 @@ class AdaClip(TrainerX):
 
         loss_summary = {
             "loss_pos": loss_pos.item(),
-            "loss_pos_pt": loss_pos_pt.item(),
             "loss_neg": loss_neg.item(),
-            "loss_neg_pt": loss_neg_pt.item(),
+            "loss_pt": loss_pt.item(),
             "acc": compute_accuracy(output_pos[:, :1000], pos_label)[0].item(),
         }
 
@@ -486,7 +492,7 @@ class AdaClip(TrainerX):
         
     def train(self, args=None):
         self.time_start = time.time()
-        if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
+        if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER or self.cfg.TRAINER.ADAPTERS.LORA in ['vision']:
             self.load_proto(args)
         for self.epoch in range(self.start_epoch, self.max_epoch):
             self.before_epoch()

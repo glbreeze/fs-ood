@@ -199,6 +199,7 @@ class PlainMultiheadAttentionLoRA(nn.Module):
             # Extract the existing weights and biases
             existing_weight = existing_mha.in_proj_weight.data
             existing_bias = existing_mha.in_proj_bias.data if existing_mha.in_proj_bias is not None else None
+            dtype = existing_weight.dtype
 
             # Initialize q_proj
             self.q_proj.weight.data.copy_(existing_weight[:self.embed_dim, :])
