@@ -310,33 +310,11 @@ class AdaClip(TrainerX):
             if ("prompt_learner" in name) and (not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT):
                 param.requires_grad_(False)
 
-        # ============ define optimzer ============
-        if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
-            if cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
-                self.optim_img = build_optimizer(self.model.image_adapter, cfg.OPTIM)
-                self.sched_img = build_lr_scheduler(self.optim_img, cfg.OPTIM)
-                self.register_model("image_adapter", self.model.image_adapter, self.optim_img, self.sched_img)
-            else:
-                self.register_model("image_adapter", self.model.image_adapter)
-                
-        if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
-            if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
-                self.optim_txt = build_optimizer(self.model.prompt_learner, cfg.OPTIM)
-                self.sched_txt = build_lr_scheduler(self.optim_txt, cfg.OPTIM)
-                self.register_model("prompt_learner", self.model.prompt_learner, self.optim_txt, self.sched_txt)
-            else:
-                self.register_model("prompt_learner", self.model.prompt_learner)
-
-        if cfg.TRAINER.ADAPTERS.LORA in ['vision', 'both']:
-            self.optim_lora = build_optimizer(self.model.image_encoder, cfg.OPTIM, param_groups=get_lora_parameters(self.model.image_encoder))
-            self.sched_lora = build_lr_scheduler(self.optim_lora, cfg.OPTIM)
-            self.register_model("image_encoder", self.model.image_encoder, self.optim_lora, self.sched_lora)
-        
-        # ============ load pretrained weight =============
-        
+        # ============ load pretrained weights ============
         if cfg.MODEL.INIT_WEIGHTS:
+            self.load_model(cfg.MODEL.INIT_WEIGHTS, epoch=cfg.MODEL.INIT_EPOCH, module_names=self._models.keys())
+
             if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
-                self.load_model(cfg.MODEL.INIT_WEIGHTS, epoch=cfg.MODEL.INIT_EPOCH, module_name='prompt_learner')
                 self.model.load_text_prompt_features()
 
         self.scaler = GradScaler() if cfg.TRAINER.ADAPTERS.PREC == "amp" else None
@@ -455,24 +433,24 @@ class AdaClip(TrainerX):
         label = label.to(self.device)
         return input, label
 
-    def load_model(self, directory, epoch=None, module_name=None):
-        if not directory:
-            print("Note that load_model() is skipped as no pretrained model is given")
+    def load_model(self, base_directory, epoch=None, module_names=[]):
+        """
+        Load model weights for multiple modules from subfolders under the same base directory.
+        """
+        for module_name in module_names:
+            directory = osp.join(base_directory, module_name)
 
-        names = self.get_model_names() if module_name is None else [module_name]
+            model_file = f"model.pth.tar-{epoch}" if epoch is not None else "model-best.pth.tar"
+            model_path = osp.join(directory, model_file)
 
-        model_file = "model.pth.tar-" + str(epoch) if epoch is not None else "model-best.pth.tar"
-
-        for name in names:
-            model_path = osp.join(directory, name, model_file)
             if not osp.exists(model_path):
-                raise FileNotFoundError('Model not found at "{}"'.format(model_path))
+                raise FileNotFoundError(f'Model not found at "{model_path}" for module "{module_name}"')
 
             checkpoint = load_checkpoint(model_path)
             state_dict = checkpoint["state_dict"]
             epoch = checkpoint["epoch"]
-            print("Loading weights to {} " 'from "{}" (epoch = {})'.format(name, model_path, epoch))
-            self._models[name].load_state_dict(state_dict, strict=False)
+            print(f"Loading weights for {module_name} from \"{model_path}\" (epoch = {epoch})")
+            self._models[module_name].load_state_dict(state_dict, strict=False)
     
     def load_proto(self, args):
         # self.compute_class_prototypes()
