@@ -195,8 +195,8 @@ def main(args):
         return
     
     if not args.no_train:
-        #import pdb; pdb.set_trace()
-        #trainer.eval_ood(args)
+        import pdb; pdb.set_trace()
+        trainer.eval_ood(args)
         trainer.train(args)
 
 

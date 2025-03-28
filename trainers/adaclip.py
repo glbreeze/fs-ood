@@ -10,6 +10,7 @@ from torch.nn.functional import mse_loss
 from torch.cuda.amp import GradScaler, autocast
 from scipy import stats
 from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 
 import clip_w_local
 from utils.detection_util import get_and_print_results, get_feats
@@ -738,7 +739,6 @@ class AdaClip(TrainerX):
             text_feats = self.model.text_encoder(embeddings, self.model.tokenized_prompts)
             
         # ============== 
-        import matplotlib.pyplot as plt
         text_feats = text_feats[:num_classes]
         all_feats = torch.cat([id_feats_tr, id_feats, od_feats, text_feats], dim=0)
         od_labels = torch.full((len(od_feats),), -1, dtype=torch.long, device=id_labels.device)
@@ -797,3 +797,21 @@ def compute_mahalanobis_distance(feats, prototypes, class_covariances, batch_siz
     return mahalanobis_dist, sim
 
 
+def plot_scores(score1_id, score2_id, score1_od, score2_od, output_path="scatter_plot.png"):
+    """
+    Plots a scatter plot of score1 vs score2 with points colored based on ID/OOD samples.
+    """
+    plt.figure(figsize=(8, 6), dpi=300)
+
+    plt.scatter(score1_id, score2_id, c='blue', label='ID', alpha=0.5, s=10)
+
+    plt.scatter(score1_od, score2_od, c='red', label='OOD', alpha=0.5, s=10)
+
+    plt.xlabel("Score 1")
+    plt.ylabel("Score 2")
+    plt.title("Scatter Plot of Score1 vs Score2")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(output_path)
+    plt.close()
+    print(f"Scatter plot saved to {output_path}")
