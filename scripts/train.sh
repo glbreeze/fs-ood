@@ -94,6 +94,57 @@ python train_ada.py \
         INPUT.NUM_CROPS 10
 
 
+python train_ada.py \
+        --root /vast/lg154/datasets \
+        --seed 1 \
+        --trainer AdaClip \
+        --dataset-config-file configs/datasets/imagenet.yaml \
+        --config-file configs/trainers/LoCoOp/vit_b16_ep50.yaml \
+        --load-epoch 50 \
+        --output-dir output/imagenet/adaclip/vit_b16_ep50_8shots/test \
+        DATASET.NUM_SHOTS 8 \
+        MODEL.INIT_WEIGHTS output/imagenet/adaclip/vit_b16_ep50_8shots/both20,0.15_nr0.2,0.5_lam5.0 \
+        MODEL.INIT_EPOCH 40 \
+        TRAINER.ADAPTERS.USE_TEXT_PROMPT True \
+        TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT False \
+        TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
+        TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
+        TRAINER.ADAPTERS.LORA vision \
+        TRAINER.ADAPTERS.TRAIN_LORA False \
+        INPUT.NUM_CROPS 10 \
+        TRAINER.ADAPTERS.LAMBDA_NEG 0.2 \
+        TRAINER.ADAPTERS.LAMBDA 1.0
+
+
+
+
+python train_ada.py \
+        --root /vast/lg154/datasets \
+        --seed 1 \
+        --trainer AdaClip \
+        --dataset-config-file configs/datasets/imagenet.yaml \
+        --config-file configs/trainers/LoCoOp/vit_b16_ep50.yaml \
+        --load-epoch 50 \
+        --topk 0.15 \
+        --output-dir output/imagenet/adaclip/vit_b16_ep50_8shots/both20,0.15_nr0.2,0.5_lam1.0_test  \
+        DATASET.NUM_SHOTS 8 \
+        MODEL.INIT_WEIGHTS output/imagenet/adaclip/vit_b16_ep50_8shots/text_shot8_nr0.2 \
+        MODEL.INIT_EPOCH 10 \
+        TRAINER.ADAPTERS.USE_TEXT_PROMPT True \
+        TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT False \
+        TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
+        TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
+        TRAINER.ADAPTERS.LORA none \
+        TRAINER.ADAPTERS.TRAIN_LORA False \
+        INPUT.NUM_CROPS 20 \
+        TRAINER.ADAPTERS.TEMP 0.05 \
+        TRAINER.ADAPTERS.LAMBDA_NEG 0.5 \
+        TRAINER.ADAPTERS.LAMBDA 1.0
+
+
+
+text_shot8_nr0.2
+both_shot8_nr0.2,0.5_lam5.0
 
 python train_ada.py \
         --root /vast/lg154/datasets \
@@ -105,15 +156,16 @@ python train_ada.py \
         --output-dir output/imagenet/adaclip/vit_b16_ep50_8shots/test \
         DATASET.NUM_SHOTS 8 \
         MODEL.INIT_WEIGHTS output/imagenet/adaclip/vit_b16_ep50_8shots/text_shot8_nr0.2 \
-        MODEL.INIT_EPOCH ${EP} \
+        MODEL.INIT_EPOCH 10 \
         TRAINER.ADAPTERS.USE_TEXT_PROMPT True \
         TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT False \
         TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
         TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
-        TRAINER.ADAPTERS.LORA vision \
+        TRAINER.ADAPTERS.LORA none \
         INPUT.NUM_CROPS 10 \
         TRAINER.ADAPTERS.LAMBDA_NEG 0.2 \
         TRAINER.ADAPTERS.LAMBDA 1.0
+
 
 
 
@@ -139,7 +191,6 @@ python train_ada.py \
         INPUT.NUM_CROPS 10 \
         TRAINER.ADAPTERS.LAMBDA_NEG 0.2 \
         TRAINER.ADAPTERS.LAMBDA 1.0
-"
 
 
 singularity exec --nv --overlay /scratch/lg154/python10/overlay-25GB-500K.ext3:ro --overlay /vast/work/public/ml-datasets/imagenet/imagenet-train.sqf:ro --overlay /vast/work/public/ml-datasets/imagenet/imagenet-val.sqf:ro /scratch/lg154/python10/cuda11.8.86-cudnn8.7-devel-ubuntu22.04.2.sif /bin/bash

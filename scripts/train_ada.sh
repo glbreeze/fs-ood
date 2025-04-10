@@ -32,7 +32,7 @@ python train_ada.py \
         --trainer AdaClip \
         --dataset-config-file configs/datasets/imagenet.yaml \
         --config-file configs/trainers/LoCoOp/vit_b16_ep50.yaml \
-        --output-dir output/imagenet/adaclip/vit_b16_ep50_${SHOT}shots/text_shot${SHOT}_nr${NEGR} \
+        --output-dir output/imagenet/adaclip/vit_b16_ep50_${SHOT}shots/text_shot${SHOT}_nr${NEGR}_new \
         --topk 8 \
         --load-epoch 50 \
         --model-dir output/imagenet/LoCoOp/vit_b16_ep50_8shots/nctx16_cscFalse_ctpend/seed1 \

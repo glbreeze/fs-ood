@@ -11,6 +11,7 @@ from torch.cuda.amp import GradScaler, autocast
 from scipy import stats
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 import clip_w_local
 from utils.detection_util import get_and_print_results, get_feats
@@ -178,7 +179,6 @@ class CustomCLIP(nn.Module):
             image_features = self.image_adapter(image_features)
         
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        # local_image_features = local_image_features / local_image_features.norm(dim=-1, keepdim=True)
 
         # ===== get text features =====
         if use_ori_clip: 
@@ -309,10 +309,36 @@ class AdaClip(TrainerX):
                 param.requires_grad_(False)
             if ("prompt_learner" in name) and (not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT):
                 param.requires_grad_(False)
+        
+        # ============ define optimzer ============
+        if cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER:
+            if cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
+                self.optim_img = build_optimizer(self.model.image_adapter, cfg.OPTIM)
+                self.sched_img = build_lr_scheduler(self.optim_img, cfg.OPTIM)
+                self.register_model("image_adapter", self.model.image_adapter, self.optim_img, self.sched_img)
+            else:
+                self.register_model("image_adapter", self.model.image_adapter)
+                
+        if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT:
+            if cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
+                self.optim_txt = build_optimizer(self.model.prompt_learner, cfg.OPTIM)
+                self.sched_txt = build_lr_scheduler(self.optim_txt, cfg.OPTIM)
+                self.register_model("prompt_learner", self.model.prompt_learner, self.optim_txt, self.sched_txt)
+            else:
+                self.register_model("prompt_learner", self.model.prompt_learner)
+
+        if cfg.TRAINER.ADAPTERS.LORA in ['vision', 'both']:
+            self.optim_lora = build_optimizer(self.model.image_encoder, cfg.OPTIM, param_groups=get_lora_parameters(self.model.image_encoder))
+            self.sched_lora = build_lr_scheduler(self.optim_lora, cfg.OPTIM)
+            self.register_model("image_encoder", self.model.image_encoder, self.optim_lora, self.sched_lora)
 
         # ============ load pretrained weights ============
+        self.model.eval()
         if cfg.MODEL.INIT_WEIGHTS:
-            self.load_model(cfg.MODEL.INIT_WEIGHTS, epoch=cfg.MODEL.INIT_EPOCH, module_names=self._models.keys())
+            module_names = ['prompt_learner']
+            if cfg.TRAINER.ADAPTERS.LORA == 'vision' and not cfg.TRAINER.ADAPTERS.TRAIN_LORA:
+                module_names.append("image_encoder")
+            self.load_model(cfg.MODEL.INIT_WEIGHTS, epoch=cfg.MODEL.INIT_EPOCH, module_names=module_names)
 
             if cfg.TRAINER.ADAPTERS.USE_TEXT_PROMPT and not cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
                 self.model.load_text_prompt_features()
@@ -379,33 +405,55 @@ class AdaClip(TrainerX):
 
             with torch.no_grad():
                 output_fz, image_feats_fz = self.model(image, use_ori_clip=True)
-                pos_img, pos_label, neg_img, neg_label = filter_positive_negative(output_fz, image, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=0.1)
+                pos_img, pos_label, neg_img, neg_label = filter_positive_negative(output_fz, image, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=self.cfg.TRAINER.TOPK)
                 del output_fz, image_feats_fz
                 gc.collect()
                 torch.cuda.empty_cache()
             
+            # with torch.no_grad():
+            #     mix_alpha = self.cfg.TRAINER.MIXUP_ALPHA if hasattr(self.cfg.TRAINER, 'MIXUP_ALPHA') else 1.0
+            #     lam = torch.distributions.beta.Beta(mix_alpha, mix_alpha).sample((len(neg_img),)).to(neg_img.device)
+            #     lam = torch.max(lam, 1-lam).view(-1, 1, 1, 1)
+                
+            #     idx = torch.randperm(len(neg_img))
+            #     neg_img_shuffled = neg_img[idx]
+            #     mixed_neg_img = lam * neg_img + (1 - lam) * neg_img_shuffled
+                
+            #     neg_img_all = torch.cat([neg_img, mixed_neg_img], dim=0)
+            #     neg_label_all = torch.cat([neg_label, neg_label], dim=0)
+    
             for optim in self._optims.values():
                 if optim is not None:
                     optim.zero_grad()
 
             output_pos, image_feats_pos = self.model(pos_img)
             loss_pos = F.cross_entropy(output_pos, pos_label)
+            if self.cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
+                loss_pos.backward()
 
             output_neg, image_feats_neg = self.model(neg_img)
             prob_neg = F.softmax(output_neg, dim=-1)
             loss_neg = -torch.log((prob_neg[:, -len(self.model.text_features_neg):].sum(dim=-1) + 1e-9) /
                                     (prob_neg.sum(dim=-1) + 1e-9)).mean()
-                
-            if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER or self.cfg.TRAINER.ADAPTERS.LORA in ['vision']:
+            if self.cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT:
+                (self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG*loss_neg).backward()
+            
+            train_img_flag = (self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER or self.cfg.TRAINER.ADAPTERS.LORA in ['vision']) and (not self.cfg.TRAINER.ADAPTERS.TRAIN_TEXT_PROMPT)
+            if train_img_flag:
                 loss_pt = torch.clamp(
                     F.cosine_similarity(image_feats_neg, self.model.prototypes[neg_label], dim=-1) -
-                    F.cosine_similarity(image_feats_pos, self.model.prototypes[pos_label], dim=-1) + 0.01,
+                    F.cosine_similarity(image_feats_pos, self.model.prototypes[pos_label], dim=-1) + self.cfg.TRAINER.MARGIN,
                     min = 0
                 ).mean()
-            else:
-                loss_pt = torch.tensor(0.0, device=loss_pos.device)
                 
-            (loss_pos + self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG*loss_neg + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_pt).backward()
+                (loss_pos + self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG*loss_neg + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_pt).backward()
+                
+                # logit_pos = torch.einsum("bd,kd->bk", image_feats_pos, self.model.prototypes)/self.cfg.TRAINER.ADAPTERS.TEMP
+                # logit_neg = torch.einsum("bd,kd->bk", image_feats_neg, self.model.prototypes)/self.cfg.TRAINER.ADAPTERS.TEMP
+                # pb_neg = F.softmax(logit_neg, dim=-1)
+                # loss_pt = F.cross_entropy(logit_pos, pos_label) - torch.log(1 - pb_neg[:, neg_label] + 1e-8).mean() 
+                
+                # loss_pt = F.cross_entropy(logit_pos, pos_label) + torch.sum(pb_neg * torch.log(pb_neg + 1e-8), dim=-1).mean()
             
             for optim in self._optims.values():
                 if optim is not None:
@@ -414,7 +462,7 @@ class AdaClip(TrainerX):
         loss_summary = {
             "loss_pos": loss_pos.item(),
             "loss_neg": loss_neg.item(),
-            "loss_pt": loss_pt.item(),
+            "loss_pt": loss_pt.item() if train_img_flag else 0,
             "acc": compute_accuracy(output_pos[:, :1000], pos_label)[0].item(),
         }
 
@@ -473,6 +521,10 @@ class AdaClip(TrainerX):
         self.time_start = time.time()
         if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER or self.cfg.TRAINER.ADAPTERS.LORA in ['vision']:
             self.load_proto(args)
+        
+        self.num_batches = len(self.train_loader_x)
+        self.epoch = 0
+        self.eval_ood(args)
         for self.epoch in range(self.start_epoch, self.max_epoch):
             self.before_epoch()
             self.run_epoch()
@@ -552,31 +604,33 @@ class AdaClip(TrainerX):
 
         def get_id_score(data_loader, T = 0.01, tau = 0):
             all_feats, all_labels, all_sim = get_feats(data_loader, self.model)
-            
-            maha, sim_pt = compute_mahalanobis_distance(all_feats.cuda(), self.model.prototypes.cuda(), self.model.class_covariances.cuda())
+            all_feats_norm = all_feats / all_feats.norm(dim=-1, keepdim=True)
+            maha, sim_pt = compute_mahalanobis_distance(all_feats_norm.cuda(), self.model.prototypes.cuda(), self.model.class_covariances.cuda())
             maha = maha.cpu()
             maha, idx = maha.min(dim=-1)
             pred_probs = F.softmax(all_sim / T, dim=1)
-            id_score = pred_probs[torch.arange(len(pred_probs)), idx]
+            # id_score = pred_probs[torch.arange(len(pred_probs)), idx]   # large value for id
 
-            id_score1 = 1 - pred_probs[:, -len(self.model.text_features_neg):].sum(dim=-1)  # the larger the better
+            id_score1 = 1 - pred_probs[:, -len(self.model.text_features_neg):].sum(dim=-1)  # large values for id
             
             tau=0
-            energy_score = - T * torch.logsumexp(sim_pt/T, dim=-1)  # the lower the better
-            id_score2 = torch.sigmoid(-(energy_score - tau))        # the larger the better
+            energy_score = - T * torch.logsumexp(sim_pt/T, dim=-1)  # small values for id
+            id_score2 = torch.sigmoid(-(energy_score - tau))        # large values for id
             
             softmax_prob = F.softmax(sim_pt / T, dim=-1) 
-            id_score3, _ = torch.max(softmax_prob, dim=-1)          # the larger the better
+            id_score3, _ = torch.max(softmax_prob, dim=-1)          # large values for id
+            
+            id_score = -torch.sum(softmax_prob * torch.log(softmax_prob + 1e-8), dim=-1) # small value for id
             
             sim, _ = torch.max(sim_pt, dim=-1)
             
-            return all_labels, maha.cpu().numpy(), id_score.cpu().numpy(), id_score1.cpu().numpy(), id_score2.cpu().numpy(), id_score3.cpu().numpy(), sim.cpu().numpy()
+            return all_labels, maha.cpu().numpy(), id_score.cpu().numpy(), id_score1.cpu().numpy(), id_score2.cpu().numpy(), id_score3.cpu().numpy(), sim.cpu().numpy(), all_feats.cpu().numpy()
             
         # Load the model and preprocessing pipeline
         _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
 
         id_data_loader = set_val_loader(args, preprocess)
-        all_labels, id_maha, id_score, id_score1, id_score2, id_score3, id_score4 = get_id_score(id_data_loader, T=self.cfg.TEST.T, tau=self.cfg.TEST.TAU)
+        all_labels, id_maha, id_score, id_score1, id_score2, id_score3, id_score4, id_feats = get_id_score(id_data_loader, T=self.cfg.TEST.T, tau=self.cfg.TEST.TAU)
         
         auroc_list, aupr_list, fpr_list = [], [], []
         auroc_list1, aupr_list1, fpr_list1 = [], [], []
@@ -590,13 +644,13 @@ class AdaClip(TrainerX):
         for idx, out_dataset in enumerate(out_datasets):
             print(f"Evaluting OOD dataset {out_dataset}...")
             ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
-            _, od_maha, od_score, od_score1, od_score2, od_score3, od_score4 = get_id_score(ood_loader, T=self.cfg.TEST.T, tau=self.cfg.TEST.TAU)
+            _, od_maha, od_score, od_score1, od_score2, od_score3, od_score4, od_feats = get_id_score(ood_loader, T=self.cfg.TEST.T, tau=self.cfg.TEST.TAU)
             # torch.save({'od_maha': od_maha, 'od_idx': od_idx, 'od_sim': od_sim}, f'datasets/od_maha_{out_dataset}.pth')
             
             # print(f"------ ID score: {stats.describe(id_score)}, {out_dataset} OOD score: {stats.describe(od_score)}")
             # print(f"------ ID score 1: {stats.describe(id_score3)}, {out_dataset} OOD score 1: {stats.describe(od_score3)}")
 
-            fpr, auroc, aupr = get_and_print_results(-id_score, -od_score, auroc_list, aupr_list, fpr_list)
+            fpr, auroc, aupr = get_and_print_results(id_score, od_score, auroc_list, aupr_list, fpr_list)
             fpr1, auroc1, aupr1 = get_and_print_results(-id_score1, -od_score1, auroc_list1, aupr_list1, fpr_list1)
             fpr0, auroc0, aupr0 = get_and_print_results(id_maha, od_maha, auroc_list0, aupr_list0, fpr_list0)
             fpr2, auroc2, aupr2 = get_and_print_results(-id_score2, -od_score2, auroc_list2, aupr_list2, fpr_list2)
@@ -605,6 +659,13 @@ class AdaClip(TrainerX):
             # print(f"=======> OOD data {out_dataset} Score@0, FPR:{fpr}, AUROC:{auroc}, AURPC:{aupr}")
             # print(f"=======> OOD data {out_dataset} Score@1, FPR:{fpr1}, AUROC:{auroc1}, AURPC:{aupr1}")
             # plot_distribution(args, -id_score, -od_score, out_dataset, score='new')
+            # t_sne_plot(id_feats, od_feats, all_labels, filename= out_dataset+"_tsne_id_ood_un.png")
+            # plot_scores(id_score1, id_score, od_score1, od_score, output_path=out_dataset+"_scatter_plot1_.png")
+            # plot_scores(id_score1, -id_maha,  od_score1, -od_maha, output_path=out_dataset+"_scatter_plot1m.png")
+            # plot_scores(id_score1, id_score2, od_score1, od_score2, output_path=out_dataset+"_scatter_plot12.png")
+            # plot_scores(id_score1, id_score3, od_score1, od_score3, output_path=out_dataset+"_scatter_plot13.png")
+            # plot_scores(id_score1, id_score4, od_score1, od_score4, output_path=out_dataset+"_scatter_plot14.png")
+            
 
         print("OOD avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list), np.mean(auroc_list), np.mean(aupr_list)))
         print("OOD1 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list1), np.mean(auroc_list1), np.mean(aupr_list1)))
@@ -614,6 +675,10 @@ class AdaClip(TrainerX):
         print("OOD4 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list4), np.mean(auroc_list4), np.mean(aupr_list4)))
         
         wandb.log({
+            "ood/fpr": np.mean(fpr_list), 
+            "ood/auroc": np.mean(auroc_list), 
+            "ood/aupr": np.mean(aupr_list),
+            
             "ood/fpr1": np.mean(fpr_list1), 
             "ood/auroc1": np.mean(auroc_list1), 
             "ood/aupr1": np.mean(aupr_list1),
@@ -793,3 +858,39 @@ def plot_scores(score1_id, score2_id, score1_od, score2_od, output_path="scatter
     plt.savefig(output_path)
     plt.close()
     print(f"Scatter plot saved to {output_path}")
+
+
+def t_sne_plot(id_feats, od_feats, id_labels, filename="tsne_id_ood.png"):
+    all_feats = np.concatenate([id_feats, od_feats], axis=0)
+    tsne = TSNE(n_components=2, perplexity=30, random_state=42)
+    tsne_feats = tsne.fit_transform(all_feats)
+
+    tsne_id = tsne_feats[:len(id_feats)]
+    tsne_od = tsne_feats[len(id_feats):]
+
+    palette = sns.color_palette("hsv", n_colors=1000)  # or use "tab20" if you want to limit color range
+    id_colors = np.array([palette[label] for label in id_labels])
+
+    plt.figure(figsize=(12, 10))
+
+    # Plot ID features
+    plt.scatter(tsne_id[:, 0], tsne_id[:, 1],
+                c=id_colors,
+                s=10,
+                alpha=0.4,
+                marker='o',
+                label='ID')
+
+    # Plot OD features
+    plt.scatter(tsne_od[:, 0], tsne_od[:, 1],
+                c='gray',
+                s=10,
+                alpha=0.3,
+                marker='x',
+                label='OOD')
+
+    plt.title("t-SNE of ID (colored by class) and OOD (gray) Features")
+    plt.axis('off')
+    plt.legend()
+    plt.savefig(filename, dpi=300, bbox_inches='tight')  # or use .pdf for vector format
+    plt.close()

@@ -10,8 +10,8 @@
 #SBATCH --partition=a100_1,a100_2,v100
 
 SHOT=$1
-LAMB=$2
-NEGR=$3
+NEGR=$2
+LAMB=$3
 EP=$4
 
 # Singularity path
@@ -36,7 +36,8 @@ python train_ada.py \
         --dataset-config-file configs/datasets/imagenet.yaml \
         --config-file configs/trainers/LoCoOp/vit_b16_ep50.yaml \
         --load-epoch 50 \
-        --output-dir output/imagenet/adaclip/vit_b16_ep50_${SHOT}shots/both_shot${SHOT}_nr0.2,${NEGR}_lam${LAMB}  \
+        --topk 0.15 \
+        --output-dir output/imagenet/adaclip/vit_b16_ep50_${SHOT}shots/both20,0.15_nr0.2,${NEGR}_lam${LAMB}_new  \
         DATASET.NUM_SHOTS ${SHOT} \
         MODEL.INIT_WEIGHTS output/imagenet/adaclip/vit_b16_ep50_${SHOT}shots/text_shot${SHOT}_nr0.2 \
         MODEL.INIT_EPOCH 10 \
@@ -45,7 +46,8 @@ python train_ada.py \
         TRAINER.ADAPTERS.USE_IMAGE_ADAPTER False \
         TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER False \
         TRAINER.ADAPTERS.LORA vision \
-        INPUT.NUM_CROPS 10 \
+        TRAINER.ADAPTERS.TRAIN_LORA True \
+        INPUT.NUM_CROPS 20 \
         TRAINER.ADAPTERS.LAMBDA_NEG ${NEGR} \
         TRAINER.ADAPTERS.LAMBDA ${LAMB}
 "

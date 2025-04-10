@@ -101,10 +101,10 @@ def get_and_print_results(in_score, out_score, auroc_list, aupr_list, fpr_list):
     aurocs, auprs, fprs = [], [], []
     measures = get_measures(-in_score, -out_score)
     aurocs.append(measures[0]); auprs.append(measures[1]); fprs.append(measures[2])
-    print(f'in score samples (random sampled): {in_score[:3]}, out score samples: {out_score[:3]}')
 
     auroc = np.mean(aurocs); aupr = np.mean(auprs); fpr = np.mean(fprs)
     auroc_list.append(auroc); aupr_list.append(aupr); fpr_list.append(fpr)  # used to calculate the avg over multiple OOD test sets
+    print(f'fpr:{fpr:.4f}, auroc:{auroc:.4f}, aupr:{aupr:.4f}, in score samples (random sampled): {in_score[:3]}, out score samples: {out_score[:3]}')
     return fpr, auroc, aupr
 
 

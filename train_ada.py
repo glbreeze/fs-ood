@@ -55,6 +55,9 @@ def reset_cfg(cfg, args):
     if args.head:
         cfg.MODEL.HEAD.NAME = args.head
     
+    if args.topk:
+        cfg.TRAINER.TOPK = args.topk
+    
     if args.T:
         cfg.TEST.T = args.T
     
@@ -88,6 +91,7 @@ def extend_cfg(cfg):
     cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER = False
 
     cfg.TRAINER.ADAPTERS.LORA = 'none' # 'vision'
+    cfg.TRAINER.ADAPTERS.TRAIN_LORA = False
     cfg.TRAINER.ADAPTERS.LORA_POSITION = 'all'
     cfg.TRAINER.ADAPTERS.LORA_R = 2
     cfg.TRAINER.ADAPTERS.LORA_A = 1
@@ -108,8 +112,12 @@ def extend_cfg(cfg):
 
     cfg.DATASET.SUBSAMPLE_CLASSES = "all"  # all, base or new    # ========= need to change!! 
     
-    cfg.TEST.T=0.01
+    cfg.TRAINER.ADAPTERS.TEMP = 1.0
+    cfg.TRAINER.TOPK=0.1
+    cfg.TEST.T=0.1
     cfg.TEST.TAU=0
+    cfg.TRAINER.MIXUP_ALPHA = 1.0
+    cfg.TRAINER.MARGIN = 0.05
     
     # if "two_crop" in cfg.INPUT.TRANSFORMS:
     #     cfg.INPUT.GLOBAL_RRCROP_SCALE = (0.2, 1.0)
@@ -195,8 +203,8 @@ def main(args):
         return
     
     if not args.no_train:
-        import pdb; pdb.set_trace()
-        trainer.eval_ood(args)
+        # import pdb; pdb.set_trace()
+        # trainer.eval_ood(args)
         trainer.train(args)
 
 
@@ -238,7 +246,7 @@ if __name__ == "__main__":
         help="modify config options using the command-line",
     )
     # augment for LoCoOp
-    parser.add_argument('--topk', type=int, default=10, help='topk')
+    parser.add_argument('--topk', type=float, default=0.1, help='topk')
     # argment for MCM and GL-MCM
     parser.add_argument('--in_dataset', default='imagenet', type=str,
                         choices=['imagenet'], help='in-distribution dataset')
@@ -249,7 +257,7 @@ if __name__ == "__main__":
     
     # argument for choosing negative labels 
     parser.add_argument('--pct_low', default=0.2, type=float)
-    parser.add_argument('--pct', default=0.15, type=float)
+    parser.add_argument('--pct', default=0.1, type=float)
     parser.add_argument('--percentile', default=0.95, type=float)
     args = parser.parse_args()
     main(args)
