@@ -172,7 +172,11 @@ class CustomCLIP(nn.Module):
             self.image_encoder_base.eval()
             with torch.no_grad():
                 image_features = self.image_encoder_base(image.type(self.dtype))
-        else: 
+        elif use_ori_clip: 
+            self.image_encoder.eval()
+            with torch.no_grad():
+                image_features = self.image_encoder(image.type(self.dtype))
+        else:
             image_features = self.image_encoder(image.type(self.dtype))
         
         if self.cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER and (not use_ori_clip):
@@ -404,6 +408,7 @@ class AdaClip(TrainerX):
             label = torch.repeat_interleave(label, self.cfg.INPUT.NUM_CROPS)
 
             with torch.no_grad():
+                import pdb; pdb.set_trace()
                 output_fz, image_feats_fz = self.model(image, use_ori_clip=True)
                 pos_img, pos_label, neg_img, neg_label = filter_positive_negative(output_fz, image, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=self.cfg.TRAINER.TOPK)
                 del output_fz, image_feats_fz
@@ -522,9 +527,7 @@ class AdaClip(TrainerX):
         if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER or self.cfg.TRAINER.ADAPTERS.LORA in ['vision']:
             self.load_proto(args)
         
-        self.num_batches = len(self.train_loader_x)
-        self.epoch = 0
-        self.eval_ood(args)
+        # self.eval_ood(args, step=0)
         for self.epoch in range(self.start_epoch, self.max_epoch):
             self.before_epoch()
             self.run_epoch()
@@ -592,7 +595,7 @@ class AdaClip(TrainerX):
 
         return contains_label
         
-    def eval_ood(self, args):
+    def eval_ood(self, args, step=None):
         self.set_model_mode("eval")
         # self.compute_class_prototypes()
         # torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth') # prototypes for ID
@@ -674,6 +677,8 @@ class AdaClip(TrainerX):
         print("OOD3 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list3), np.mean(auroc_list3), np.mean(aupr_list3)))
         print("OOD4 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list4), np.mean(auroc_list4), np.mean(aupr_list4)))
         
+        if step is None:
+            step = (1 + self.epoch) * self.num_batches
         wandb.log({
             "ood/fpr": np.mean(fpr_list), 
             "ood/auroc": np.mean(auroc_list), 
@@ -698,7 +703,7 @@ class AdaClip(TrainerX):
             "ood/fpr4": np.mean(fpr_list4), 
             "ood/auroc4": np.mean(auroc_list4), 
             "ood/aupr4": np.mean(aupr_list4),
-        }, step=(1 + self.epoch) * self.num_batches)
+        }, step=step)
         
     def eval_ood1(self, args):
         self.set_model_mode("eval")

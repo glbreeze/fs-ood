@@ -190,7 +190,7 @@ def main(args):
     os.environ["WANDB_CACHE_DIR"] = "/scratch/lg154/sseg/.cache/wandb"
     os.environ["WANDB_CONFIG_DIR"] = "/scratch/lg154/sseg/.config/wandb"
     run_name = cfg.OUTPUT_DIR if cfg.OUTPUT_DIR else "default_run"
-    wandb.init(project='fs_ood_ada', name=run_name)
+    wandb.init(project='fs_ood_ad', name=run_name)
     wandb.config.update(cfg_to_dict(cfg))
 
     # os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
