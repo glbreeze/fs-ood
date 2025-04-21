@@ -21,7 +21,7 @@ CUSTOM_TEMPLATES = {
 }
 
 
-def filter_positive_negative(logits, images, labels, num_crops, top_k_percent):
+def filter_positive_negative(logits, images, labels, num_crops, top_k, bot_k):
     """images: [N, C, H, W]"""
     num_samples = logits.shape[0] // num_crops  # Compute number of original samples
 
@@ -33,9 +33,10 @@ def filter_positive_negative(logits, images, labels, num_crops, top_k_percent):
     ground_truth_logits = logits.gather(dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)  # [num_samples, num_crops]
     sorted_logits, sorted_indices = torch.sort(ground_truth_logits, descending=True, dim=-1)  # [num_samples, num_crops]
 
-    num_positive = max(1, int(num_crops * top_k_percent))
+    num_positive = max(1, int(num_crops * top_k))
+    num_negative = max(1, int(num_crops * bot_k))
     pos_indices = sorted_indices[:, :num_positive]  # [num_samples, num_positive]
-    neg_indices = sorted_indices[:, -num_positive:] # [num_samples, num_positive]
+    neg_indices = sorted_indices[:, -num_negative:] # [num_samples, num_positive]
 
     def gather_samples_and_labels(images, indices, labels):
         if images.dim() == 3:  # [B, N, d]

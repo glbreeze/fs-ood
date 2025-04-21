@@ -55,8 +55,6 @@ def reset_cfg(cfg, args):
     if args.head:
         cfg.MODEL.HEAD.NAME = args.head
 
-    if args.topk:
-        cfg.topk = args.topk
 
 
 def extend_cfg(cfg):
@@ -84,6 +82,10 @@ def extend_cfg(cfg):
     cfg.TRAINER.ADAPTERS.USE_IMAGE_ADAPTER = False
     cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER = False
     
+    cfg.TRAINER.ADAPTERS.TEMP = 1.0
+    cfg.TRAINER.ADAPTERS.TOPK = 0.1
+    cfg.TRAINER.ADAPTERS.BOTK = 0.1
+    
     # Add configurations specific to the text adapter
     cfg.TRAINER.LOCOOP = CN()
     cfg.TRAINER.LOCOOP.N_CTX = 16   # number of context vectors
@@ -98,10 +100,7 @@ def extend_cfg(cfg):
     cfg.TRAINER.IMAGE_ADAPTER.RATIO = 0.2
 
     cfg.DATASET.SUBSAMPLE_CLASSES = "all"  # all, base or new    # ========= need to change!! 
-    
-    # if "two_crop" in cfg.INPUT.TRANSFORMS:
-    #     cfg.INPUT.GLOBAL_RRCROP_SCALE = (0.2, 1.0)
-    #     cfg.INPUT.LOCAL_RRCROP_SCALE = (0.05, 0.2)
+
 
 def setup_cfg(args):
     cfg = get_cfg_default()
@@ -153,6 +152,7 @@ def cfg_to_dict(cfg_node):
 
 def main(args):
     cfg = setup_cfg(args)
+    
     if cfg.SEED >= 0:
         print("Setting fixed seed: {}".format(cfg.SEED))
         set_random_seed(cfg.SEED)
@@ -174,7 +174,6 @@ def main(args):
     wandb.config.update(cfg_to_dict(cfg))
 
     # os.environ["WANDB_API_KEY"] = "0c0abb4e8b5ce4ee1b1a4ef799edece5f15386ee"
-    import pdb; pdb.set_trace()
     torch.cuda.empty_cache()
     trainer = build_trainer(cfg)
     
@@ -200,7 +199,7 @@ if __name__ == "__main__":
         help="checkpoint directory (from which the training resumes)",
     )
     parser.add_argument(
-        "--seed", type=int, default=-1, help="only positive value enables a fixed seed"
+        "--seed", type=int, default=1, help="only positive value enables a fixed seed"
     )
     parser.add_argument(
         "--config-file", type=str, default="", help="path to config file"
@@ -226,8 +225,7 @@ if __name__ == "__main__":
         nargs=argparse.REMAINDER,
         help="modify config options using the command-line",
     )
-    # augment for LoCoOp
-    parser.add_argument('--topk', type=int, default=10, help='topk')
+
     # argment for MCM and GL-MCM
     parser.add_argument('--in_dataset', default='imagenet', type=str,
                         choices=['imagenet'], help='in-distribution dataset')

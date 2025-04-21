@@ -336,7 +336,7 @@ class AdaClip(TrainerX):
                 with torch.no_grad():
                     logits, feature = self.model(image.type(self.model.dtype), use_ori_clip=True)
                     probs = F.softmax(logits, dim=-1)
-                    pos_feat, pos_label, neg_feat, neg_label = filter_positive_negative(logits, feature, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=0.2)
+                    pos_feat, pos_label, neg_feat, neg_label = filter_positive_negative(logits, feature, label, self.cfg.INPUT.NUM_CROPS, top_k=0.2, bot_k=0.2)
                     
                     # keep_prob_mask = probs[torch.arange(probs.size(0)), label] > 0.02
                     # topk_check = is_label_in_topk(logits, label, self.cfg.topk)
@@ -377,7 +377,7 @@ class AdaClip(TrainerX):
 
             with torch.no_grad():
                 output_fz, image_feats_fz = self.model(image, use_ori_clip=True)
-                pos_img, pos_label, neg_img, neg_label = filter_positive_negative(output_fz, image, label, self.cfg.INPUT.NUM_CROPS, top_k_percent=0.1)
+                pos_img, pos_label, neg_img, neg_label = filter_positive_negative(output_fz, image, label, self.cfg.INPUT.NUM_CROPS, top_k=self.cfg.TRAINER.ADAPTERS.TOPK, bot_k=self.cfg.TRAINER.ADAPTERS.BOTK)
                 del output_fz, image_feats_fz
                 gc.collect()
                 torch.cuda.empty_cache()
@@ -385,23 +385,19 @@ class AdaClip(TrainerX):
             for optim in self._optims.values():
                 optim.zero_grad()
 
-            if pos_img.numel() > 0:
-                output_pos, image_feats_pos = self.model(pos_img)
-                loss_pos = F.cross_entropy(output_pos, pos_label)
-                loss_pos_pt = 1 - F.cosine_similarity(image_feats_pos, self.model.prototypes[pos_label], dim=-1).mean() \
-                            if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER else torch.tensor(0.0).to(loss_pos.device)
-                (loss_pos + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_pos_pt).backward()
+            output_pos, image_feats_pos = self.model(pos_img)
+            loss_pos = F.cross_entropy(output_pos, pos_label)
+            loss_pos_pt = 1 - F.cosine_similarity(image_feats_pos, self.model.prototypes[pos_label], dim=-1).mean() \
+                        if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER else torch.tensor(0.0).to(loss_pos.device)
+            (loss_pos + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_pos_pt).backward()
 
-            if neg_img.numel() > 0:
-                output_neg, image_feats_neg = self.model(neg_img)
-                prob_neg = F.softmax(output_neg, dim=-1)
-                
-                loss_neg = -torch.log((prob_neg[:, -len(self.model.text_features_neg):].sum(dim=-1) + 1e-9) /
-                                    (prob_neg.sum(dim=-1) + 1e-9)).mean()
-                loss_neg_pt = F.cosine_similarity(image_feats_neg, self.model.prototypes[neg_label], dim=-1).mean() \
-                            if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER else torch.tensor(0.0).to(loss_neg.device)
-                
-                (self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG*(loss_neg + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_neg_pt)).backward()
+            output_neg, image_feats_neg = self.model(neg_img)
+            prob_neg = F.softmax(output_neg, dim=-1)
+            loss_neg = -torch.log((prob_neg[:, -len(self.model.text_features_neg):].sum(dim=-1) + 1e-9) /
+                                (prob_neg.sum(dim=-1) + 1e-9)).mean()
+            loss_neg_pt = F.cosine_similarity(image_feats_neg, self.model.prototypes[neg_label], dim=-1).mean() \
+                        if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER else torch.tensor(0.0).to(loss_neg.device)
+            (self.cfg.TRAINER.ADAPTERS.LAMBDA_NEG*(loss_neg + self.cfg.TRAINER.ADAPTERS.LAMBDA * loss_neg_pt)).backward()
             
             for optim in self._optims.values():
                 optim.step()
@@ -469,6 +465,10 @@ class AdaClip(TrainerX):
     def train(self, args=None):
         if self.cfg.TRAINER.ADAPTERS.TRAIN_IMAGE_ADAPTER:
             self.load_proto(args)
+            
+        self.num_batches = len(self.train_loader_x)
+        self.epoch = 0
+        self.eval_ood(args, step=0)
         for self.epoch in range(self.start_epoch, self.max_epoch):
             self.before_epoch()
             self.run_epoch()
@@ -536,7 +536,7 @@ class AdaClip(TrainerX):
 
         return contains_label
         
-    def eval_ood(self, args):
+    def eval_ood(self, args, step=None):
         self.set_model_mode("eval")
         # self.compute_class_prototypes()
         # torch.save({'proto': self.model.prototypes, 'var': self.model.class_covariances}, 'datasets/proto_var.pth') # prototypes for ID
@@ -555,15 +555,14 @@ class AdaClip(TrainerX):
 
             id_score1 = pred_probs[:, -len(self.model.text_features_neg):].sum(dim=-1)
 
-            return maha, id_score, id_score1, all_labels
+            # id score larger -> id, id_score1: large -> od
+            return all_labels, maha.cpu().numpy(), id_score.cpu().numpy(), id_score1.cpu().numpy()
             
         # Load the model and preprocessing pipeline
         _, preprocess = clip_w_local.load(self.cfg.MODEL.BACKBONE.NAME)
 
         id_data_loader = set_val_loader(args, preprocess)
-        id_maha, id_score, id_score1, all_labels = get_id_score(id_data_loader)
-        id_score = id_score.cpu().numpy()    # The larger the better
-        id_score1 = id_score1.cpu().numpy()  # The smaller the better
+        all_labels, id_maha, id_score, id_score1 = get_id_score(id_data_loader)
         
         auroc_list, aupr_list, fpr_list = [], [], []
         auroc_list1, aupr_list1, fpr_list1 = [], [], []
@@ -573,10 +572,7 @@ class AdaClip(TrainerX):
         for idx, out_dataset in enumerate(out_datasets):
             print(f"Evaluting OOD dataset {out_dataset}...")
             ood_loader = set_ood_loader_ImageNet(args, out_dataset, preprocess)
-            od_maha, od_score, od_score1, _ = get_id_score(ood_loader)
-            od_score = od_score.cpu().numpy()
-            od_score1 = od_score1.cpu().numpy()
-            # torch.save({'od_maha': od_maha, 'od_idx': od_idx, 'od_sim': od_sim}, f'datasets/od_maha_{out_dataset}.pth')
+            _,  od_maha, od_score, od_score1 = get_id_score(ood_loader)
             
             # print(f"------ ID score: {stats.describe(id_score)}, {out_dataset} OOD score: {stats.describe(od_score)}")
             # print(f"------ ID score 1: {stats.describe(id_score1)}, {out_dataset} OOD score 1: {stats.describe(od_score1)}")
@@ -587,8 +583,10 @@ class AdaClip(TrainerX):
             # print(f"=======> OOD data {out_dataset} Score@1, FPR:{fpr1}, AUROC:{auroc1}, AURPC:{aupr1}")
             # plot_distribution(args, -id_score, -od_score, out_dataset, score='new')
 
-        print("OOD avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list), np.mean(auroc_list), np.mean(aupr_list)))
-        print("OOD1 avg. FPR:{}, AUROC:{}, AUPR:{}".format(np.mean(fpr_list1), np.mean(auroc_list1), np.mean(aupr_list1)))
+        step = step if step is not None else (1 + self.epoch) * self.num_batches
+        print("EPOCH:{}, OOD  avg. FPR:{}, AUROC:{}, AUPR:{}".format(step//self.num_batches, np.mean(fpr_list), np.mean(auroc_list), np.mean(aupr_list)))
+        print("EPOCH:{}, OOD1 avg. FPR:{}, AUROC:{}, AUPR:{}".format(step//self.num_batches, np.mean(fpr_list1), np.mean(auroc_list1), np.mean(aupr_list1)))
+        
         wandb.log({
             "ood/fpr": np.mean(fpr_list), 
             "ood/auroc": np.mean(auroc_list), 
@@ -596,7 +594,7 @@ class AdaClip(TrainerX):
             "ood/fpr1": np.mean(fpr_list1), 
             "ood/auroc1": np.mean(auroc_list1), 
             "ood/aupr1": np.mean(aupr_list1)
-        }, step=(1 + self.epoch) * self.num_batches)
+        }, step=step)
         
     def eval_ood1(self, args):
         self.set_model_mode("eval")
